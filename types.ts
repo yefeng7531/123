@@ -32,6 +32,8 @@ export interface SoupData {
 export interface AISettings {
   model: string;
   temperature: number;
+  apiKey?: string;
+  baseUrl?: string;
 }
 
 export const LOGIC_CONFIGS: Record<SoupLogic, { description: string }> = {

@@ -7,7 +7,8 @@ import { HistoryList } from './components/HistoryList';
 import { Skull, History, Sparkles } from 'lucide-react';
 
 // Key for localStorage
-const STORAGE_KEY = 'turtle_soup_history_v1';
+const HISTORY_STORAGE_KEY = 'turtle_soup_history_v1';
+const SETTINGS_STORAGE_KEY = 'turtle_soup_settings_v1';
 
 const App: React.FC = () => {
   // --- Generator State ---
@@ -15,9 +16,23 @@ const App: React.FC = () => {
   const [tone, setTone] = useState<SoupTone>(SoupTone.Default);
   const [difficulty, setDifficulty] = useState<SoupDifficulty>(SoupDifficulty.Normal);
   const [customPrompt, setCustomPrompt] = useState<string>("");
-  const [aiSettings, setAiSettings] = useState<AISettings>({
-    model: 'gemini-2.5-flash',
-    temperature: 1.1
+  
+  // Initialize AI Settings from storage or defaults
+  const [aiSettings, setAiSettings] = useState<AISettings>(() => {
+    try {
+      const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error("Failed to load settings", e);
+    }
+    return {
+      model: 'gemini-2.5-flash',
+      temperature: 1.1,
+      apiKey: '',
+      baseUrl: ''
+    };
   });
 
   // --- App Logic State ---
@@ -30,7 +45,7 @@ const App: React.FC = () => {
   // Load history on mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
       if (saved) {
         setHistory(JSON.parse(saved));
       }
@@ -41,8 +56,13 @@ const App: React.FC = () => {
 
   // Save history on change
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
   }, [history]);
+
+  // Save settings on change
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(aiSettings));
+  }, [aiSettings]);
 
   const handleGenerate = async () => {
     setIsLoading(true);
@@ -66,8 +86,8 @@ const App: React.FC = () => {
       setCurrentSoup(newSoup);
       setHistory(prev => [newSoup, ...prev].slice(0, 50)); // Limit to 50 items
       // Don't auto-switch tab, just show the result
-    } catch (err) {
-      setError("熬汤失败，或是网络波动，或是灵感枯竭。请稍后再试。");
+    } catch (err: any) {
+      setError(`熬汤失败: ${err.message || "请检查 API 设置或网络连接。"}`);
       console.error(err);
     } finally {
       setIsLoading(false);

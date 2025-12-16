@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SoupLogic, SoupTone, SoupDifficulty, LOGIC_CONFIGS, TONE_CONFIGS, DIFFICULTY_CONFIGS, PRESET_TAGS, AISettings } from '../types';
-import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BarChart3 } from 'lucide-react';
+import { testConnection, fetchModels } from '../services/geminiService';
+import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BarChart3, Key, Link, Plug, CheckCircle2, XCircle, Server, RefreshCw } from 'lucide-react';
 
 interface ControlsProps {
   logic: SoupLogic;
@@ -17,6 +18,14 @@ interface ControlsProps {
   isLoading: boolean;
 }
 
+const DEFAULT_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-3-pro-preview",
+  "gemini-2.0-flash-exp",
+  "gemini-1.5-pro",
+  "gemini-1.5-flash",
+];
+
 export const Controls: React.FC<ControlsProps> = ({
   logic,
   setLogic,
@@ -32,6 +41,39 @@ export const Controls: React.FC<ControlsProps> = ({
   isLoading,
 }) => {
   const [showSettings, setShowSettings] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [connectionMsg, setConnectionMsg] = useState('');
+  const [availableModels, setAvailableModels] = useState<string[]>(DEFAULT_MODELS);
+
+  const handleTestConnection = async () => {
+    setConnectionStatus('testing');
+    setConnectionMsg('正在连接...');
+    try {
+      // 1. Test basic connectivity (Ping)
+      await testConnection(aiSettings);
+      
+      // 2. Fetch available models
+      setConnectionMsg('获取模型列表...');
+      const models = await fetchModels(aiSettings);
+      
+      if (models.length > 0) {
+        setAvailableModels(models);
+        // If current model is not in the list, keep it but maybe warn? Or just let it be.
+      } else {
+        // Fallback if fetch returns empty but connection worked (unlikely for Gemini)
+        setAvailableModels(DEFAULT_MODELS);
+      }
+
+      setConnectionStatus('success');
+      setConnectionMsg(`已连接 (发现 ${models.length > 0 ? models.length : '默认'} 个模型)`);
+      
+      // Reset status visual after a delay
+      setTimeout(() => setConnectionStatus('idle'), 3000);
+    } catch (error: any) {
+      setConnectionStatus('error');
+      setConnectionMsg(error.message || '连接失败');
+    }
+  };
 
   return (
     <div className="flex flex-col gap-5 p-5 bg-slate-900/50 backdrop-blur-md rounded-2xl border border-slate-700 shadow-xl w-full max-w-md">
@@ -156,33 +198,110 @@ export const Controls: React.FC<ControlsProps> = ({
           className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${showSettings ? 'text-amber-500' : 'text-slate-500 hover:text-slate-300'}`}
         >
           <Settings className="w-3.5 h-3.5" />
-          AI 设置
+          API 连接 (API Connections)
         </button>
       </div>
 
-      {/* AI Settings Panel */}
+      {/* AI Settings Panel - SillyTavern Style */}
       {showSettings && (
-        <div className="bg-slate-950/30 rounded-xl p-3 space-y-3 animate-in fade-in slide-in-from-top-2">
-          <div className="space-y-1">
-             <label className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">模型选择</label>
-             <div className="grid grid-cols-1 gap-1">
-                <button 
-                  onClick={() => setAiSettings({...aiSettings, model: 'gemini-2.5-flash'})}
-                  className={`text-left px-3 py-2 rounded border text-xs flex items-center justify-between ${aiSettings.model === 'gemini-2.5-flash' ? 'bg-amber-900/20 border-amber-800 text-amber-100' : 'bg-slate-900 border-slate-800 text-slate-400'}`}
-                >
-                  <span className="font-bold">Gemini 2.5 Flash</span>
-                  <span className="text-[10px] opacity-70">快速</span>
-                </button>
-                <button 
-                  onClick={() => setAiSettings({...aiSettings, model: 'gemini-3-pro-preview'})}
-                  className={`text-left px-3 py-2 rounded border text-xs flex items-center justify-between ${aiSettings.model === 'gemini-3-pro-preview' ? 'bg-amber-900/20 border-amber-800 text-amber-100' : 'bg-slate-900 border-slate-800 text-slate-400'}`}
-                >
-                  <span className="font-bold">Gemini 3.0 Pro</span>
-                  <span className="text-[10px] opacity-70">聪明</span>
-                </button>
+        <div className="bg-slate-950/40 rounded-xl p-3 space-y-4 animate-in fade-in slide-in-from-top-2 border border-slate-800">
+          
+          <div className="space-y-3">
+             {/* API Key Input */}
+             <div className="space-y-1">
+               <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                 <Key className="w-3 h-3" /> API Key
+               </label>
+               <input 
+                 type="password"
+                 value={aiSettings.apiKey || ''}
+                 onChange={(e) => setAiSettings({...aiSettings, apiKey: e.target.value})}
+                 placeholder="粘贴你的 API Key"
+                 className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none font-mono"
+               />
+             </div>
+             
+             {/* Base URL Input */}
+             <div className="space-y-1">
+               <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                 <Link className="w-3 h-3" /> API Endpoint (Base URL)
+               </label>
+               <input 
+                 type="text"
+                 value={aiSettings.baseUrl || ''}
+                 onChange={(e) => setAiSettings({...aiSettings, baseUrl: e.target.value})}
+                 placeholder="默认: Google官方, 可填 Gemini 格式的反代"
+                 className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none font-mono"
+               />
+             </div>
+
+             {/* Connection Status & Button */}
+             <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-2 flex-1">
+                  <button 
+                    onClick={handleTestConnection}
+                    disabled={connectionStatus === 'testing'}
+                    className={`
+                      flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-all border w-24 shrink-0
+                      ${connectionStatus === 'testing' 
+                        ? 'bg-slate-800 border-slate-700 text-slate-500' 
+                        : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+                      }
+                    `}
+                  >
+                    {connectionStatus === 'testing' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plug className="w-3 h-3" />}
+                    {connectionStatus === 'testing' ? 'Connecting' : 'Connect'}
+                  </button>
+                  
+                  {connectionMsg && (
+                    <div className={`flex items-center gap-1 text-[10px] font-bold overflow-hidden whitespace-nowrap text-ellipsis ${connectionStatus === 'success' ? 'text-emerald-500' : connectionStatus === 'error' ? 'text-red-500' : 'text-slate-500'}`}>
+                       {connectionStatus === 'success' && <CheckCircle2 className="w-3 h-3 shrink-0" />}
+                       {connectionStatus === 'error' && <XCircle className="w-3 h-3 shrink-0" />}
+                       <span>{connectionMsg}</span>
+                    </div>
+                  )}
+                </div>
              </div>
           </div>
+
+          <div className="h-px bg-slate-800 w-full" />
+
+          {/* Model Selection (Text Input + Datalist) */}
           <div className="space-y-1">
+             <div className="flex items-center justify-between">
+                <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                   <Server className="w-3 h-3" /> 模型选择 (Model ID)
+                </label>
+                <span className="text-[10px] text-slate-600">
+                  {availableModels.length > 5 ? `已加载 ${availableModels.length} 个模型` : '使用预设列表'}
+                </span>
+             </div>
+             
+             <div className="relative group">
+                <input 
+                  list="model-options"
+                  type="text"
+                  value={aiSettings.model}
+                  onChange={(e) => setAiSettings({...aiSettings, model: e.target.value})}
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none font-mono"
+                  placeholder="输入或选择模型 ID"
+                />
+                <div className="absolute right-2 top-1.5 pointer-events-none opacity-50">
+                  <RefreshCw className={`w-3 h-3 ${connectionStatus === 'testing' ? 'animate-spin' : ''}`} />
+                </div>
+                <datalist id="model-options">
+                  {availableModels.map(m => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+             </div>
+             <p className="text-[10px] text-slate-600 pt-0.5">
+               {availableModels.length > 0 && !DEFAULT_MODELS.every(m => availableModels.includes(m)) ? "已同步最新模型列表" : "支持 gemini-2.5-flash, gemini-3-pro 等"}
+             </p>
+          </div>
+
+          {/* Temperature */}
+          <div className="space-y-1 pt-1">
              <div className="flex justify-between">
                 <label className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">创意度 (Temperature): {aiSettings.temperature}</label>
              </div>
@@ -196,8 +315,8 @@ export const Controls: React.FC<ControlsProps> = ({
                className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
              />
              <div className="flex justify-between text-[10px] text-slate-600">
-                <span>严谨</span>
-                <span>疯狂</span>
+                <span>严谨 (0.5)</span>
+                <span>疯狂 (1.5)</span>
              </div>
           </div>
         </div>

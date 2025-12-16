@@ -1,8 +1,68 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { SoupLogic, SoupTone, SoupDifficulty, SoupData, AISettings } from "../types";
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+/**
+ * 测试 API 连接配置是否有效
+ */
+export const testConnection = async (settings: AISettings): Promise<boolean> => {
+  const apiKey = settings.apiKey?.trim() || process.env.API_KEY;
+  if (!apiKey) throw new Error("缺少 API Key");
+
+  const clientConfig: any = { apiKey };
+  if (settings.baseUrl?.trim()) {
+    clientConfig.baseUrl = settings.baseUrl.trim();
+  }
+
+  const ai = new GoogleGenAI(clientConfig);
+
+  try {
+    // 尝试发送一个极简的请求来验证连通性
+    await ai.models.generateContent({
+      model: settings.model || 'gemini-2.5-flash',
+      contents: "Ping",
+      config: {
+        maxOutputTokens: 1,
+      }
+    });
+    return true;
+  } catch (error) {
+    console.error("Connection test failed:", error);
+    throw error;
+  }
+};
+
+/**
+ * 获取可用模型列表
+ */
+export const fetchModels = async (settings: AISettings): Promise<string[]> => {
+  const apiKey = settings.apiKey?.trim() || process.env.API_KEY;
+  if (!apiKey) throw new Error("缺少 API Key");
+
+  const clientConfig: any = { apiKey };
+  if (settings.baseUrl?.trim()) {
+    clientConfig.baseUrl = settings.baseUrl.trim();
+  }
+
+  const ai = new GoogleGenAI(clientConfig);
+
+  try {
+    const response = await ai.models.list();
+    // Assuming the response structure based on standard API
+    // The SDK returns an object with a models property which is an array
+    const models = (response as any).models || [];
+    
+    return models
+      .map((m: any) => {
+        const name = m.name || m.displayName || "";
+        return name.replace(/^models\//, "");
+      })
+      .filter((name: string) => name.length > 0);
+  } catch (error) {
+    console.error("Failed to fetch models:", error);
+    // Return empty array to allow UI to handle fallback
+    return [];
+  }
+};
 
 export const generateSoup = async (
   logic: SoupLogic,
@@ -11,6 +71,21 @@ export const generateSoup = async (
   customPrompt: string,
   settings: AISettings
 ): Promise<SoupData> => {
+  
+  // 确定 API Key：优先使用设置中的 Key，否则回退到环境变量
+  const apiKey = settings.apiKey?.trim() || process.env.API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("未配置 API Key。请在设置中输入您的 Google Gemini API Key。");
+  }
+
+  // 动态初始化 Client
+  const clientConfig: any = { apiKey };
+  if (settings.baseUrl?.trim()) {
+    clientConfig.baseUrl = settings.baseUrl.trim();
+  }
+  
+  const ai = new GoogleGenAI(clientConfig);
   
   const toneDesc = tone === SoupTone.Default ? "没有特定的恐怖或搞笑偏好，主要看重谜题质量" : `风格倾向于"${tone}"`;
   
