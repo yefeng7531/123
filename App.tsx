@@ -1,35 +1,98 @@
-import React, { useState } from 'react';
-import { SoupLogic, SoupTone, SoupData, AISettings } from './types';
+import React, { useState, useEffect } from 'react';
+import { SoupLogic, SoupTone, SoupDifficulty, SoupData, AISettings } from './types';
 import { generateSoup } from './services/geminiService';
 import { Controls } from './components/Controls';
 import { SoupCard } from './components/SoupCard';
-import { Skull } from 'lucide-react';
+import { HistoryList } from './components/HistoryList';
+import { Skull, History, Sparkles } from 'lucide-react';
+
+// Key for localStorage
+const STORAGE_KEY = 'turtle_soup_history_v1';
 
 const App: React.FC = () => {
+  // --- Generator State ---
   const [logic, setLogic] = useState<SoupLogic>(SoupLogic.Classic);
   const [tone, setTone] = useState<SoupTone>(SoupTone.Default);
+  const [difficulty, setDifficulty] = useState<SoupDifficulty>(SoupDifficulty.Normal);
   const [customPrompt, setCustomPrompt] = useState<string>("");
   const [aiSettings, setAiSettings] = useState<AISettings>({
     model: 'gemini-2.5-flash',
     temperature: 1.1
   });
 
+  // --- App Logic State ---
   const [currentSoup, setCurrentSoup] = useState<SoupData | null>(null);
+  const [history, setHistory] = useState<SoupData[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
+
+  // Load history on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        setHistory(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error("Failed to load history", e);
+    }
+  }, []);
+
+  // Save history on change
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  }, [history]);
 
   const handleGenerate = async () => {
     setIsLoading(true);
     setError(null);
     
     try {
-      const data = await generateSoup(logic, tone, customPrompt, aiSettings);
-      setCurrentSoup(data);
+      const rawData = await generateSoup(logic, tone, difficulty, customPrompt, aiSettings);
+      
+      // Enhance data with metadata
+      const newSoup: SoupData = {
+        ...rawData,
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        logic, // Save context
+        tone,  // Save context
+      };
+
+      setCurrentSoup(newSoup);
+      setHistory(prev => [newSoup, ...prev].slice(0, 50)); // Limit to 50 items
+      // Don't auto-switch tab, just show the result
     } catch (err) {
       setError("熬汤失败，或是网络波动，或是灵感枯竭。请稍后再试。");
       console.error(err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSelectHistory = (soup: SoupData) => {
+    setCurrentSoup(soup);
+    // Optionally restore the settings that created this soup? 
+    // For now let's just show the soup.
+    if (window.innerWidth < 1024) {
+      // On mobile, maybe scroll to top?
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleDeleteHistory = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setHistory(prev => prev.filter(item => item.id !== id));
+    if (currentSoup?.id === id) {
+      setCurrentSoup(null);
+    }
+  };
+
+  const handleClearHistory = () => {
+    if (confirm("确定要清空所有历史记录吗？")) {
+      setHistory([]);
+      setCurrentSoup(null);
     }
   };
 
@@ -60,20 +123,54 @@ const App: React.FC = () => {
 
         <main className="w-full flex flex-col lg:flex-row items-start justify-center gap-8 lg:gap-16 max-w-7xl">
           
-          {/* Left Column: Controls */}
-          <aside className="w-full lg:w-auto flex justify-center lg:sticky lg:top-8 shrink-0">
-            <Controls 
-              logic={logic}
-              setLogic={setLogic}
-              tone={tone}
-              setTone={setTone}
-              customPrompt={customPrompt}
-              setCustomPrompt={setCustomPrompt}
-              aiSettings={aiSettings}
-              setAiSettings={setAiSettings}
-              onGenerate={handleGenerate}
-              isLoading={isLoading}
-            />
+          {/* Left Column: Sidebar (Tabs + Content) */}
+          <aside className="w-full lg:w-[400px] flex flex-col gap-4 lg:sticky lg:top-8 shrink-0 transition-all">
+            
+            {/* Tabs Switcher */}
+            <div className="flex p-1 bg-slate-900/80 backdrop-blur rounded-xl border border-slate-700 shadow-lg">
+              <button 
+                onClick={() => setActiveTab('create')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'create' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <Sparkles className="w-4 h-4" />
+                生成
+              </button>
+              <button 
+                onClick={() => setActiveTab('history')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'history' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <History className="w-4 h-4" />
+                历史
+                {history.length > 0 && <span className="ml-1 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded-full">{history.length}</span>}
+              </button>
+            </div>
+
+            {/* Content Area */}
+            <div className="relative">
+              {activeTab === 'create' ? (
+                <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+                  <Controls 
+                    logic={logic} setLogic={setLogic}
+                    tone={tone} setTone={setTone}
+                    difficulty={difficulty} setDifficulty={setDifficulty}
+                    customPrompt={customPrompt} setCustomPrompt={setCustomPrompt}
+                    aiSettings={aiSettings} setAiSettings={setAiSettings}
+                    onGenerate={handleGenerate}
+                    isLoading={isLoading}
+                  />
+                </div>
+              ) : (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                  <HistoryList 
+                    history={history}
+                    onSelect={handleSelectHistory}
+                    onDelete={handleDeleteHistory}
+                    onClear={handleClearHistory}
+                    currentId={currentSoup?.id}
+                  />
+                </div>
+              )}
+            </div>
           </aside>
 
           {/* Right Column: Display */}
@@ -85,12 +182,18 @@ const App: React.FC = () => {
             )}
             
             {currentSoup ? (
-              <SoupCard data={currentSoup} logic={logic} tone={tone} />
+              <SoupCard 
+                data={currentSoup} 
+                logic={currentSoup.logic || logic} 
+                tone={currentSoup.tone || tone} 
+              />
             ) : (
               // Empty State
               <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-slate-600 gap-4 opacity-50">
                 <div className="w-24 h-24 rounded-full border-2 border-dashed border-slate-700 animate-[spin_10s_linear_infinite]" />
-                <p className="font-serif text-lg">请在左侧配置规则，开始熬汤...</p>
+                <p className="font-serif text-lg">
+                  {history.length > 0 ? "点击左侧历史记录回看，或开始新的生成..." : "请在左侧配置规则，开始熬汤..."}
+                </p>
               </div>
             )}
           </section>

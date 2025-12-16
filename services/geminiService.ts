@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { SoupLogic, SoupTone, SoupData, AISettings } from "../types";
+import { SoupLogic, SoupTone, SoupDifficulty, SoupData, AISettings } from "../types";
 
 // Initialize Gemini Client
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -7,6 +7,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 export const generateSoup = async (
   logic: SoupLogic,
   tone: SoupTone,
+  difficulty: SoupDifficulty,
   customPrompt: string,
   settings: AISettings
 ): Promise<SoupData> => {
@@ -22,12 +23,17 @@ export const generateSoup = async (
        - 如果是变格：必须包含超自然、科幻或奇幻元素，需要通过脑洞来解谜。
     2. 汤底色调：${tone}。
        - ${toneDesc}。
-    3. 题材/关键词：${customPrompt ? customPrompt : '随机选择一个有趣的题材'}。
+    3. 难度目标：${difficulty}。
+       - 简单：对应难度1-2星，逻辑比较直观，不需要过于复杂的转弯。
+       - 普通：对应难度3星，有一定思维陷阱，需要仔细推敲。
+       - 困难：对应难度4星，核心诡计难以看破，线索非常隐晦。
+       - 烧脑：对应难度5星，极需侧向思维能力，真相往往颠覆常识。
+    4. 题材/关键词：${customPrompt ? customPrompt : '随机选择一个有趣的题材'}。
 
     【谜题标准】
     1. 汤面（谜面）要引人入胜，包含强烈的矛盾点或令人费解的现象。
     2. 汤底（真相）要出人意料但又完全符合上述设定的逻辑。
-    3. 难度适中（3-5星）。
+    3. 难度评分请严格对应上述选择。
     4. 请用简体中文回复。
   `;
 
@@ -56,7 +62,7 @@ export const generateSoup = async (
             },
             difficulty: {
               type: Type.INTEGER,
-              description: "Difficulty level from 1 to 5",
+              description: "Difficulty level from 1 to 5, matching the requested difficulty goal",
             },
             tags: {
               type: Type.ARRAY,

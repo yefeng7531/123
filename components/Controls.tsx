@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { SoupLogic, SoupTone, LOGIC_CONFIGS, TONE_CONFIGS, PRESET_TAGS, AISettings } from '../types';
-import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BrainCircuit } from 'lucide-react';
+import { SoupLogic, SoupTone, SoupDifficulty, LOGIC_CONFIGS, TONE_CONFIGS, DIFFICULTY_CONFIGS, PRESET_TAGS, AISettings } from '../types';
+import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BrainCircuit, BarChart3 } from 'lucide-react';
 
 interface ControlsProps {
   logic: SoupLogic;
   setLogic: (l: SoupLogic) => void;
   tone: SoupTone;
   setTone: (t: SoupTone) => void;
+  difficulty: SoupDifficulty;
+  setDifficulty: (d: SoupDifficulty) => void;
   customPrompt: string;
   setCustomPrompt: (s: string) => void;
   aiSettings: AISettings;
@@ -20,6 +22,8 @@ export const Controls: React.FC<ControlsProps> = ({
   setLogic,
   tone,
   setTone,
+  difficulty,
+  setDifficulty,
   customPrompt,
   setCustomPrompt,
   aiSettings,
@@ -87,7 +91,39 @@ export const Controls: React.FC<ControlsProps> = ({
         </div>
       </div>
 
-      {/* Section 3: Custom Prompt */}
+      {/* Section 3: Difficulty */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-slate-200 font-bold font-serif">
+          <BarChart3 className="w-4 h-4 text-blue-500" />
+          <span>难度等级</span>
+        </div>
+        <div className="grid grid-cols-4 gap-1.5">
+          {(Object.values(SoupDifficulty) as SoupDifficulty[]).map((d) => {
+            const isSelected = difficulty === d;
+            const config = DIFFICULTY_CONFIGS[d];
+            return (
+              <button
+                key={d}
+                onClick={() => setDifficulty(d)}
+                className={`
+                  flex flex-col items-center justify-center py-2 px-1 rounded-lg border transition-all
+                  ${isSelected 
+                    ? `bg-slate-800 border-slate-600 ${config.color} shadow-sm` 
+                    : 'bg-slate-900/40 border-slate-800/50 text-slate-500 hover:bg-slate-800/60'
+                  }
+                `}
+                title={config.description}
+              >
+                <span className="text-lg mb-0.5">{config.icon}</span>
+                <span className="text-xs font-bold scale-90">{d}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-slate-500 px-1 text-center h-4">{DIFFICULTY_CONFIGS[difficulty].description}</p>
+      </div>
+
+      {/* Section 4: Custom Prompt */}
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-slate-200 font-bold font-serif">
           <PenTool className="w-4 h-4 text-amber-500" />
