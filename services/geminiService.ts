@@ -4,9 +4,6 @@ import { SoupLogic, SoupTone, SoupDifficulty, SoupData, AISettings } from "../ty
 // --- Helpers ---
 
 const getApiKey = (settings: AISettings): string => {
-  // Logic: 
-  // 1. Prefer user entered key
-  // 2. Fallback to env key ONLY IF user input is empty/undefined.
   const userKey = settings.apiKey?.trim();
   const envKey = process.env.API_KEY;
   
@@ -16,16 +13,33 @@ const getApiKey = (settings: AISettings): string => {
   throw new Error("请配置 API Key");
 };
 
-const getOpenAIBaseUrl = (settings: AISettings): string => {
-  let url = settings.baseUrl?.trim();
+/**
+ * 清洗 Base URL
+ * 1. 去除末尾斜杠
+ * 2. 如果用户粘贴了完整的 /chat/completions 路径，自动去除，保留 Base 部分
+ */
+const cleanBaseUrl = (inputUrl: string | undefined): string => {
+  let url = inputUrl?.trim();
   if (!url) return "https://api.openai.com/v1";
   
-  // Remove trailing slash for consistency
-  if (url.endsWith('/')) url = url.slice(0, -1);
+  // Remove trailing slashes
+  while (url.endsWith('/')) {
+    url = url.slice(0, -1);
+  }
   
-  // Common pitfall: User enters "https://api.example.com" but NewAPI needs "https://api.example.com/v1"
-  // We won't auto-append /v1 forcingly because some custom backends might not use it, 
-  // but it's the standard. We assume the user inputs the full path to the API root.
+  // Fix common mistake: User pastes full endpoint "https://.../v1/chat/completions"
+  // We need the base "https://.../v1"
+  if (url.endsWith('/chat/completions')) {
+    url = url.slice(0, -'/chat/completions'.length);
+  } else if (url.endsWith('/chat')) {
+    url = url.slice(0, -'/chat'.length);
+  }
+
+  // Remove trailing slashes again just in case
+  while (url.endsWith('/')) {
+    url = url.slice(0, -1);
+  }
+  
   return url;
 };
 
@@ -35,10 +49,10 @@ export const testConnection = async (settings: AISettings): Promise<boolean> => 
   const apiKey = getApiKey(settings);
   
   if (settings.provider === 'openai') {
-    // OpenAI Compatible Test
-    const baseUrl = getOpenAIBaseUrl(settings);
-    try {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
+    let baseUrl = cleanBaseUrl(settings.baseUrl);
+    
+    const tryConnect = async (url: string): Promise<boolean> => {
+      const response = await fetch(`${url}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -52,16 +66,53 @@ export const testConnection = async (settings: AISettings): Promise<boolean> => 
       });
 
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error?.message || `HTTP ${response.status}: ${response.statusText}`);
+        // Create specific error object to catch status codes
+        const error: any = new Error(`HTTP ${response.status}: ${response.statusText}`);
+        error.status = response.status;
+        try {
+           const json = await response.json();
+           if (json.error?.message) error.message = json.error.message;
+        } catch (e) {}
+        throw error;
       }
       return true;
+    };
+
+    try {
+      return await tryConnect(baseUrl);
     } catch (error: any) {
+      // Auto-fix: If 404 or 405 (Method Not Allowed), and URL doesn't end in /v1, 
+      // the user likely forgot /v1. Try appending it.
+      if ((error.status === 404 || error.status === 405) && !baseUrl.endsWith('/v1')) {
+        console.log("Connection failed, trying auto-append /v1...");
+        try {
+           const newUrl = `${baseUrl}/v1`;
+           await tryConnect(newUrl);
+           // If successful, we should ideally inform the UI to update the setting, 
+           // but strictly speaking we return true here indicating *connectivity* is possible.
+           // To persist this fix, we throw a specific success-like error or just let the user know.
+           // For now, we return true, but the next request might fail if we don't return the corrected URL.
+           // Since we can't easily mutate settings here, we will rely on generateSoup applying the same logic 
+           // OR we throw a descriptive error telling the user to add /v1.
+           
+           // Actually, throwing a helpful error is safer than silent magic that doesn't persist.
+           throw new Error(`连接成功！但您的 Base URL 似乎缺少 "/v1"。\n请在设置中将 URL 修改为：\n${newUrl}`);
+        } catch (retryError: any) {
+           // If retry also failed, throw original or new error
+           if (retryError.message && retryError.message.includes("请在设置中")) throw retryError;
+        }
+      }
+      
       console.error("OpenAI/NewAPI Connection failed:", error);
+      
+      if (error.status === 405) {
+        throw new Error("HTTP 405 Method Not Allowed: 请检查 Base URL 是否正确。通常 New API 需要以 /v1 结尾 (例如 https://api.site.com/v1)，且不能包含 /chat/completions。");
+      }
+      
       throw error;
     }
   } else {
-    // Google Gemini Test
+    // Gemini Test
     const clientConfig: any = { apiKey };
     if (settings.baseUrl?.trim()) {
       clientConfig.baseUrl = settings.baseUrl.trim();
@@ -88,14 +139,8 @@ export const fetchModels = async (settings: AISettings): Promise<string[]> => {
   const apiKey = getApiKey(settings);
 
   if (settings.provider === 'openai') {
-    // OpenAI Models
-    const baseUrl = getOpenAIBaseUrl(settings);
-    
-    // Construct models endpoint. 
-    // If BaseURL is "https://api.site.com/v1", models is usually "https://api.site.com/v1/models"
-    // Some endpoints might be "https://api.site.com/models" but standard OpenAI is relative to root? 
-    // Actually standard OpenAI is https://api.openai.com/v1/models.
-    // So we just append /models to the configured base url.
+    const baseUrl = cleanBaseUrl(settings.baseUrl);
+    // Standard OpenAI models endpoint
     const modelsUrl = `${baseUrl}/models`;
 
     try {
@@ -175,7 +220,7 @@ export const generateSoup = async (
 
   // --- OpenAI / New API Provider Flow ---
   if (settings.provider === 'openai') {
-    const baseUrl = getOpenAIBaseUrl(settings);
+    const baseUrl = cleanBaseUrl(settings.baseUrl);
     
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -191,10 +236,6 @@ export const generateSoup = async (
             { role: 'user', content: userPrompt }
           ],
           temperature: settings.temperature,
-          // IMPORTANT: Do NOT force `response_format: { type: "json_object" }` here.
-          // Many models served via New API (like Claude, or older models) do not support this parameter 
-          // and will throw a 400 Bad Request. 
-          // We rely on the system prompt to enforce JSON structure.
         })
       });
 
@@ -208,7 +249,7 @@ export const generateSoup = async (
       
       if (!content) throw new Error("API returned empty response");
 
-      // Clean cleanup potential markdown code blocks if the model ignored instructions
+      // Clean cleanup potential markdown code blocks
       const jsonStr = content.replace(/```json\n?|\n?```/g, "").trim();
       return JSON.parse(jsonStr) as SoupData;
 
