@@ -14,45 +14,89 @@ const getApiKey = (settings: AISettings): string => {
 };
 
 /**
- * 清洗 Base URL
- * 1. 去除末尾斜杠
- * 2. 如果用户粘贴了完整的 /chat/completions 路径，自动去除，保留 Base 部分
+ * 基础 URL 清洗
+ * 移除 /chat/completions, /models, 及多余斜杠
  */
 const cleanBaseUrl = (inputUrl: string | undefined): string => {
   let url = inputUrl?.trim();
   if (!url) return "https://api.openai.com/v1";
   
   // Remove trailing slashes
-  while (url.endsWith('/')) {
-    url = url.slice(0, -1);
-  }
+  while (url.endsWith('/')) url = url.slice(0, -1);
   
-  // Fix common mistake: User pastes full endpoint "https://.../v1/chat/completions"
-  // We need the base "https://.../v1"
-  if (url.endsWith('/chat/completions')) {
-    url = url.slice(0, -'/chat/completions'.length);
-  } else if (url.endsWith('/chat')) {
-    url = url.slice(0, -'/chat'.length);
+  // Remove standard endpoints if user pasted full URL
+  const suffixesToRemove = ['/chat/completions', '/chat', '/models', '/v1/models'];
+  for (const suffix of suffixesToRemove) {
+    if (url.endsWith(suffix)) {
+      url = url.slice(0, -suffix.length);
+    }
   }
 
-  // Remove trailing slashes again just in case
-  while (url.endsWith('/')) {
-    url = url.slice(0, -1);
-  }
-  
+  while (url.endsWith('/')) url = url.slice(0, -1);
   return url;
+};
+
+/**
+ * 安全的 Fetch 请求封装
+ * 处理 HTML 响应导致的 JSON 解析崩溃问题
+ */
+const safeFetch = async (url: string, options: RequestInit) => {
+  const response = await fetch(url, options);
+  
+  // 如果响应不是 OK，尝试解析错误信息
+  if (!response.ok) {
+    const errorText = await response.text();
+    let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+    
+    // 尝试解析 JSON 错误
+    try {
+      const errorJson = JSON.parse(errorText);
+      if (errorJson.error?.message) {
+        errorMsg = errorJson.error.message;
+      } else if (errorJson.message) {
+        errorMsg = errorJson.message;
+      }
+    } catch (e) {
+      // 如果解析失败，说明返回的可能是 HTML (比如 Nginx 404/502 页面)
+      // 截取前100个字符避免显示过长的 HTML
+      const preview = errorText.slice(0, 100).replace(/\n/g, ' ');
+      if (preview.toLowerCase().includes('<!doctype') || preview.toLowerCase().includes('<html')) {
+        errorMsg += ` (服务器返回了 HTML 网页而非 JSON，请检查 Base URL 是否正确)`;
+      } else {
+        errorMsg += ` (${preview})`;
+      }
+    }
+    throw new Error(errorMsg);
+  }
+
+  // 响应 OK，尝试解析 JSON
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // 状态码 200 但内容不是 JSON
+    throw new Error(`API 返回了无效数据 (非 JSON): ${text.slice(0, 50)}...`);
+  }
 };
 
 // --- Connection Testing ---
 
-export const testConnection = async (settings: AISettings): Promise<boolean> => {
+/**
+ * 测试连接
+ * 返回包含可能的 URL 修正建议
+ */
+export const testConnection = async (settings: AISettings): Promise<{ success: boolean; correctedBaseUrl?: string }> => {
   const apiKey = getApiKey(settings);
   
   if (settings.provider === 'openai') {
     let baseUrl = cleanBaseUrl(settings.baseUrl);
-    
-    const tryConnect = async (url: string): Promise<boolean> => {
-      const response = await fetch(`${url}/chat/completions`, {
+
+    // 定义一个测试函数
+    const performTest = async (url: string) => {
+      // 使用 chat/completions 也是一种测试，虽然 list models 更轻量，
+      // 但某些 New API 转发站可能对 list models 支持不完善，chat 更核心。
+      // 我们这里使用极简的 chat 请求。
+      return safeFetch(`${url}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -64,51 +108,30 @@ export const testConnection = async (settings: AISettings): Promise<boolean> => 
           max_tokens: 1
         })
       });
-
-      if (!response.ok) {
-        // Create specific error object to catch status codes
-        const error: any = new Error(`HTTP ${response.status}: ${response.statusText}`);
-        error.status = response.status;
-        try {
-           const json = await response.json();
-           if (json.error?.message) error.message = json.error.message;
-        } catch (e) {}
-        throw error;
-      }
-      return true;
     };
 
     try {
-      return await tryConnect(baseUrl);
+      // 第一次尝试：使用用户提供的（清洗后）URL
+      await performTest(baseUrl);
+      return { success: true };
     } catch (error: any) {
-      // Auto-fix: If 404 or 405 (Method Not Allowed), and URL doesn't end in /v1, 
-      // the user likely forgot /v1. Try appending it.
-      if ((error.status === 404 || error.status === 405) && !baseUrl.endsWith('/v1')) {
-        console.log("Connection failed, trying auto-append /v1...");
+      console.warn("Attempt 1 failed:", error.message);
+      
+      // 智能修正逻辑：
+      // 如果当前 URL 不包含 /v1，且发生了网络/协议错误，尝试追加 /v1 重试
+      if (!baseUrl.endsWith('/v1')) {
+        const altUrl = `${baseUrl}/v1`;
+        console.log(`Auto-detect: Trying alternative URL: ${altUrl}`);
         try {
-           const newUrl = `${baseUrl}/v1`;
-           await tryConnect(newUrl);
-           // If successful, we should ideally inform the UI to update the setting, 
-           // but strictly speaking we return true here indicating *connectivity* is possible.
-           // To persist this fix, we throw a specific success-like error or just let the user know.
-           // For now, we return true, but the next request might fail if we don't return the corrected URL.
-           // Since we can't easily mutate settings here, we will rely on generateSoup applying the same logic 
-           // OR we throw a descriptive error telling the user to add /v1.
-           
-           // Actually, throwing a helpful error is safer than silent magic that doesn't persist.
-           throw new Error(`连接成功！但您的 Base URL 似乎缺少 "/v1"。\n请在设置中将 URL 修改为：\n${newUrl}`);
-        } catch (retryError: any) {
-           // If retry also failed, throw original or new error
-           if (retryError.message && retryError.message.includes("请在设置中")) throw retryError;
+          await performTest(altUrl);
+          // 如果这里成功了，说明 altUrl 才是正确的
+          return { success: true, correctedBaseUrl: altUrl };
+        } catch (retryError) {
+           console.warn("Attempt 2 (with /v1) failed:", retryError);
         }
       }
       
-      console.error("OpenAI/NewAPI Connection failed:", error);
-      
-      if (error.status === 405) {
-        throw new Error("HTTP 405 Method Not Allowed: 请检查 Base URL 是否正确。通常 New API 需要以 /v1 结尾 (例如 https://api.site.com/v1)，且不能包含 /chat/completions。");
-      }
-      
+      // 如果都失败了，抛出第一次的错误（或根据情况抛出更有意义的）
       throw error;
     }
   } else {
@@ -125,7 +148,7 @@ export const testConnection = async (settings: AISettings): Promise<boolean> => 
         contents: "Ping",
         config: { maxOutputTokens: 1 }
       });
-      return true;
+      return { success: true };
     } catch (error) {
       console.error("Gemini Connection failed:", error);
       throw error;
@@ -140,17 +163,21 @@ export const fetchModels = async (settings: AISettings): Promise<string[]> => {
 
   if (settings.provider === 'openai') {
     const baseUrl = cleanBaseUrl(settings.baseUrl);
-    // Standard OpenAI models endpoint
+    // 假设 settings 中的 baseUrl 已经是经过 testConnection 验证或修正过的
     const modelsUrl = `${baseUrl}/models`;
 
     try {
+      // 使用 fetch 直接调用，不使用 safeFetch 避免抛出错误中断流程，这里只 warn
       const response = await fetch(modelsUrl, {
         headers: { 'Authorization': `Bearer ${apiKey}` }
       });
       
-      if (!response.ok) return [];
+      if (!response.ok) {
+        console.warn(`Fetch models failed: ${response.status}`);
+        return [];
+      }
       
-      const data = await response.json();
+      const data = await response.json(); // 如果这里抛错，会被 catch 捕获
       if (Array.isArray(data.data)) {
         return data.data.map((m: any) => m.id);
       }
@@ -223,7 +250,7 @@ export const generateSoup = async (
     const baseUrl = cleanBaseUrl(settings.baseUrl);
     
     try {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
+      const data = await safeFetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -239,19 +266,18 @@ export const generateSoup = async (
         })
       });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => null);
-        throw new Error(errData?.error?.message || `API Error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
       const content = data.choices?.[0]?.message?.content;
       
       if (!content) throw new Error("API returned empty response");
 
       // Clean cleanup potential markdown code blocks
       const jsonStr = content.replace(/```json\n?|\n?```/g, "").trim();
-      return JSON.parse(jsonStr) as SoupData;
+      try {
+        return JSON.parse(jsonStr) as SoupData;
+      } catch (e) {
+        console.error("Failed to parse LLM response:", content);
+        throw new Error("模型返回的数据不是有效的 JSON 格式，请重试。");
+      }
 
     } catch (error) {
       console.error("OpenAI/NewAPI Generation Error:", error);

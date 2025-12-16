@@ -64,11 +64,22 @@ export const Controls: React.FC<ControlsProps> = ({
 
     try {
       // 1. Test basic connectivity (Ping)
-      await testConnection(aiSettings);
+      // returns { success: boolean, correctedBaseUrl?: string }
+      const result = await testConnection(aiSettings);
       
-      // 2. Fetch available models
-      setConnectionMsg('获取模型列表...');
-      const models = await fetchModels(aiSettings);
+      let newSettings = { ...aiSettings };
+      
+      // Auto-correct URL if detected
+      if (result.correctedBaseUrl) {
+        newSettings.baseUrl = result.correctedBaseUrl;
+        setAiSettings(newSettings);
+        setConnectionMsg('自动修正 URL 成功！正在获取模型...');
+      } else {
+        setConnectionMsg('获取模型列表...');
+      }
+
+      // 2. Fetch available models (using potential new settings)
+      const models = await fetchModels(newSettings);
       
       if (models.length > 0) {
         setAvailableModels(models);
@@ -80,7 +91,12 @@ export const Controls: React.FC<ControlsProps> = ({
       setTimeout(() => setConnectionStatus('idle'), 3000);
     } catch (error: any) {
       setConnectionStatus('error');
-      setConnectionMsg(error.message || '连接失败');
+      // Truncate long error messages for UI
+      const msg = error.message || '连接失败';
+      setConnectionMsg(msg.length > 30 ? msg.slice(0, 30) + '...' : msg);
+      // Log full error for user inspection if needed
+      console.error("Connection Error:", error);
+      alert("连接失败: " + msg); // Alert the full message since UI space is small
     }
   };
 
@@ -278,14 +294,14 @@ export const Controls: React.FC<ControlsProps> = ({
                />
                {aiSettings.provider === 'openai' && (
                  <p className="text-[9px] text-slate-500 pl-1">
-                   提示：New API/OneAPI 通常需要以 <code>/v1</code> 结尾
+                   提示：New API/OneAPI 通常需要以 <code>/v1</code> 结尾。点击“连接”时若检测到问题会自动修正。
                  </p>
                )}
              </div>
 
              {/* Connection Status & Button */}
              <div className="flex items-center justify-between pt-1">
-                <div className="flex items-center gap-2 flex-1">
+                <div className="flex items-center gap-2 flex-1 overflow-hidden">
                   <button 
                     onClick={handleTestConnection}
                     disabled={connectionStatus === 'testing'}
