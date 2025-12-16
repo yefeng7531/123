@@ -29,14 +29,12 @@ export interface SoupData {
   tone?: SoupTone;   // Store context
 }
 
-export type AIProvider = 'gemini' | 'openai';
-
 export interface AISettings {
-  provider: AIProvider;
+  provider: 'gemini' | 'openai'; // New: Switch between Google SDK and OpenAI Compatible
+  baseUrl?: string; // New: Custom endpoint
+  apiKey?: string; // New: User override
   model: string;
   temperature: number;
-  apiKey?: string;
-  baseUrl?: string;
 }
 
 export const LOGIC_CONFIGS: Record<SoupLogic, { description: string }> = {

@@ -7,8 +7,7 @@ import { HistoryList } from './components/HistoryList';
 import { Skull, History, Sparkles } from 'lucide-react';
 
 // Key for localStorage
-const HISTORY_STORAGE_KEY = 'turtle_soup_history_v1';
-const SETTINGS_STORAGE_KEY = 'turtle_soup_settings_v1';
+const STORAGE_KEY = 'turtle_soup_history_v1';
 
 const App: React.FC = () => {
   // --- Generator State ---
@@ -16,27 +15,12 @@ const App: React.FC = () => {
   const [tone, setTone] = useState<SoupTone>(SoupTone.Default);
   const [difficulty, setDifficulty] = useState<SoupDifficulty>(SoupDifficulty.Normal);
   const [customPrompt, setCustomPrompt] = useState<string>("");
-  
-  // Initialize AI Settings from storage or defaults
-  const [aiSettings, setAiSettings] = useState<AISettings>(() => {
-    try {
-      const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Ensure provider exists for legacy saves
-        if (!parsed.provider) parsed.provider = 'gemini';
-        return parsed;
-      }
-    } catch (e) {
-      console.error("Failed to load settings", e);
-    }
-    return {
-      provider: 'gemini',
-      model: 'gemini-2.5-flash',
-      temperature: 1.1,
-      apiKey: '',
-      baseUrl: ''
-    };
+  const [aiSettings, setAiSettings] = useState<AISettings>({
+    provider: 'gemini',
+    model: 'gemini-3-pro-preview',
+    temperature: 1.1,
+    baseUrl: '',
+    apiKey: ''
   });
 
   // --- App Logic State ---
@@ -49,7 +33,7 @@ const App: React.FC = () => {
   // Load history on mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
+      const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         setHistory(JSON.parse(saved));
       }
@@ -60,13 +44,8 @@ const App: React.FC = () => {
 
   // Save history on change
   useEffect(() => {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
   }, [history]);
-
-  // Save settings on change
-  useEffect(() => {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(aiSettings));
-  }, [aiSettings]);
 
   const handleGenerate = async () => {
     setIsLoading(true);
@@ -75,23 +54,20 @@ const App: React.FC = () => {
     try {
       const rawData = await generateSoup(logic, tone, difficulty, customPrompt, aiSettings);
       
-      // Enhance data with metadata
-      // Use simple ID generation for compatibility
       const id = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
       
       const newSoup: SoupData = {
         ...rawData,
         id: id,
         timestamp: Date.now(),
-        logic, // Save context
-        tone,  // Save context
+        logic, 
+        tone,  
       };
 
       setCurrentSoup(newSoup);
-      setHistory(prev => [newSoup, ...prev].slice(0, 50)); // Limit to 50 items
-      // Don't auto-switch tab, just show the result
+      setHistory(prev => [newSoup, ...prev].slice(0, 50)); 
     } catch (err: any) {
-      setError(`熬汤失败: ${err.message || "请检查 API 设置或网络连接。"}`);
+      setError(err.message || "Failed to generate soup. Please check connection settings.");
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -100,10 +76,7 @@ const App: React.FC = () => {
 
   const handleSelectHistory = (soup: SoupData) => {
     setCurrentSoup(soup);
-    // Optionally restore the settings that created this soup? 
-    // For now let's just show the soup.
     if (window.innerWidth < 1024) {
-      // On mobile, maybe scroll to top?
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
