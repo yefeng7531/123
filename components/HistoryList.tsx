@@ -1,6 +1,6 @@
 import React from 'react';
-import { SoupData, TONE_CONFIGS, DIFFICULTY_CONFIGS, SoupDifficulty, SoupTone } from '../types';
-import { Trash2, Clock, ChevronRight, Star, Dna } from 'lucide-react';
+import { SoupData, TONE_CONFIGS, SoupTone } from '../types';
+import { Trash2, Clock, Star, Dna } from 'lucide-react';
 
 interface HistoryListProps {
   history: SoupData[];

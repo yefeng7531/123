@@ -52,9 +52,12 @@ const App: React.FC = () => {
       const rawData = await generateSoup(logic, tone, difficulty, customPrompt, aiSettings);
       
       // Enhance data with metadata
+      // Use simple ID generation for compatibility
+      const id = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+      
       const newSoup: SoupData = {
         ...rawData,
-        id: crypto.randomUUID(),
+        id: id,
         timestamp: Date.now(),
         logic, // Save context
         tone,  // Save context

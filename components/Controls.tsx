@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SoupLogic, SoupTone, SoupDifficulty, LOGIC_CONFIGS, TONE_CONFIGS, DIFFICULTY_CONFIGS, PRESET_TAGS, AISettings } from '../types';
-import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BrainCircuit, BarChart3 } from 'lucide-react';
+import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BarChart3 } from 'lucide-react';
 
 interface ControlsProps {
   logic: SoupLogic;
