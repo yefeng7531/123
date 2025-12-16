@@ -27,9 +27,11 @@ const DEFAULT_GEMINI_MODELS = [
 const DEFAULT_OPENAI_MODELS = [
   "gpt-4o",
   "gpt-4o-mini",
-  "claude-3-5-sonnet",
+  "deepseek-ai/DeepSeek-V3", 
+  "deepseek-ai/DeepSeek-R1",
   "deepseek-chat",
   "deepseek-reasoner",
+  "claude-3-5-sonnet",
 ];
 
 export const Controls: React.FC<ControlsProps> = ({
@@ -206,10 +208,10 @@ export const Controls: React.FC<ControlsProps> = ({
                 <Sparkles className="w-3 h-3" /> Gemini
               </button>
               <button
-                onClick={() => setAiSettings({...aiSettings, provider: 'openai', model: 'gpt-4o'})}
+                onClick={() => setAiSettings({...aiSettings, provider: 'openai', model: 'deepseek-ai/DeepSeek-V3'})}
                 className={`flex items-center justify-center gap-2 py-1.5 rounded text-xs font-bold transition-all ${aiSettings.provider === 'openai' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}
               >
-                <Cpu className="w-3 h-3" /> OpenAI / Proxy
+                <Cpu className="w-3 h-3" /> OpenAI / DeepSeek
               </button>
             </div>
           </div>
@@ -223,9 +225,25 @@ export const Controls: React.FC<ControlsProps> = ({
                type="text"
                value={aiSettings.baseUrl || ''}
                onChange={(e) => setAiSettings({...aiSettings, baseUrl: e.target.value})}
-               placeholder={aiSettings.provider === 'openai' ? "http://127.0.0.1:8000/v1" : "Optional (Default: Google API)"}
+               placeholder={aiSettings.provider === 'openai' ? "https://api.siliconflow.cn/v1" : "Optional (Default: Google API)"}
                className="w-full bg-[#161f33] border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/20"
              />
+             {aiSettings.provider === 'openai' && (
+               <div className="flex gap-2 justify-end">
+                  <button 
+                    onClick={() => setAiSettings({...aiSettings, baseUrl: 'https://api.siliconflow.cn/v1'})}
+                    className="text-[9px] text-slate-500 hover:text-amber-500 underline"
+                  >
+                    Set SiliconFlow
+                  </button>
+                  <button 
+                    onClick={() => setAiSettings({...aiSettings, baseUrl: 'http://127.0.0.1:8000/v1'})}
+                    className="text-[9px] text-slate-500 hover:text-amber-500 underline"
+                  >
+                    Set Local
+                  </button>
+               </div>
+             )}
           </div>
 
           {/* API Key / Password */}

@@ -77,7 +77,8 @@ export const testConnection = async (settings: AISettings): Promise<{ success: b
         body: JSON.stringify({
           model: settings.model || 'gpt-3.5-turbo',
           messages: [{ role: 'user', content: 'Ping' }],
-          max_tokens: 1
+          max_tokens: 1,
+          stream: false
         })
       });
     };
@@ -218,9 +219,7 @@ export const generateSoup = async (
   if (settings.provider === 'openai') {
     const baseUrl = getOpenAIBaseUrl(settings);
     
-    // Some proxies (like Ooba or older ones) might not support system messages well, 
-    // but SillyTavern usually assumes Chat Completion API supports system role.
-    
+    // SiliconFlow and DeepSeek models work best with stream:false for pure JSON tasks
     const body = {
       model: settings.model,
       messages: [
@@ -228,6 +227,7 @@ export const generateSoup = async (
         { role: 'user', content: userPrompt }
       ],
       temperature: settings.temperature,
+      stream: false 
     };
 
     try {
@@ -240,12 +240,35 @@ export const generateSoup = async (
         body: JSON.stringify(body)
       });
 
-      const content = data.choices?.[0]?.message?.content;
-      
-      if (!content) throw new Error("API returned empty response");
+      // Robust content extraction
+      const choice = data.choices?.[0];
+      let content = choice?.message?.content || choice?.text; // Support chat or legacy completion
 
-      const jsonStr = content.replace(/```json\n?|\n?```/g, "").trim();
-      return JSON.parse(jsonStr) as SoupData;
+      if (!content) {
+        // Provide more detailed error info for debugging
+        if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+        if (choice?.finish_reason) throw new Error(`Generation stopped: ${choice.finish_reason} (Empty content)`);
+        
+        // Dump a snippet of raw response to help user identify format issues
+        const rawSnippet = JSON.stringify(data).slice(0, 150);
+        throw new Error(`API returned empty response. Raw: ${rawSnippet}...`);
+      }
+
+      // --- DeepSeek / Reasoning Model Cleanup ---
+      // 1. Remove <think>...</think> blocks if present
+      content = content.replace(/<think>[\s\S]*?<\/think>/gi, "");
+      
+      // 2. Remove markdown code blocks
+      content = content.replace(/```json\n?|\n?```/g, "");
+
+      // 3. Find the first '{' and last '}' to extract the JSON object, 
+      //    ignoring any prologue or epilogue text often added by chat models.
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        content = jsonMatch[0];
+      }
+
+      return JSON.parse(content.trim()) as SoupData;
 
     } catch (error) {
       console.error("OpenAI/Proxy Generation Error:", error);
