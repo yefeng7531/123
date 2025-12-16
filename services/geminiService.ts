@@ -19,8 +19,13 @@ const getApiKey = (settings: AISettings): string => {
 const getOpenAIBaseUrl = (settings: AISettings): string => {
   let url = settings.baseUrl?.trim();
   if (!url) return "https://api.openai.com/v1";
-  // Remove trailing slash
+  
+  // Remove trailing slash for consistency
   if (url.endsWith('/')) url = url.slice(0, -1);
+  
+  // Common pitfall: User enters "https://api.example.com" but NewAPI needs "https://api.example.com/v1"
+  // We won't auto-append /v1 forcingly because some custom backends might not use it, 
+  // but it's the standard. We assume the user inputs the full path to the API root.
   return url;
 };
 
@@ -52,7 +57,7 @@ export const testConnection = async (settings: AISettings): Promise<boolean> => 
       }
       return true;
     } catch (error: any) {
-      console.error("OpenAI Connection failed:", error);
+      console.error("OpenAI/NewAPI Connection failed:", error);
       throw error;
     }
   } else {
@@ -85,21 +90,16 @@ export const fetchModels = async (settings: AISettings): Promise<string[]> => {
   if (settings.provider === 'openai') {
     // OpenAI Models
     const baseUrl = getOpenAIBaseUrl(settings);
-    // Usually standard OpenAI API has /v1/models. If user base url includes /v1, we might need to adjust.
-    // However, users usually set BaseURL to ".../v1".
-    // Let's try to assume BaseURL is correct root for chat/completions, so models should be at ../models?
-    // Actually, simpler to assume standard structure: [BaseURL]/models if BaseURL ends in v1, or construct it carefully.
     
-    // NOTE: Many proxy providers follow [BaseURL]/models
-    const modelsUrl = baseUrl.endsWith('/v1') 
-      ? `${baseUrl}/models` 
-      : `${baseUrl.replace(/\/chat\/completions$/, '')}/models`; 
-      // Safe bet: standard OpenAI uses /v1/models.
-      // If user put `https://api.deepseek.com`, we might need `https://api.deepseek.com/models`.
-      // Let's just try appending /models to the base (assuming base is .../v1).
+    // Construct models endpoint. 
+    // If BaseURL is "https://api.site.com/v1", models is usually "https://api.site.com/v1/models"
+    // Some endpoints might be "https://api.site.com/models" but standard OpenAI is relative to root? 
+    // Actually standard OpenAI is https://api.openai.com/v1/models.
+    // So we just append /models to the configured base url.
+    const modelsUrl = `${baseUrl}/models`;
 
     try {
-      const response = await fetch(`${baseUrl}/models`, {
+      const response = await fetch(modelsUrl, {
         headers: { 'Authorization': `Bearer ${apiKey}` }
       });
       
@@ -152,7 +152,7 @@ export const generateSoup = async (
   
   const toneDesc = tone === SoupTone.Default ? "没有特定的恐怖或搞笑偏好，主要看重谜题质量" : `风格倾向于"${tone}"`;
   
-  const systemPrompt = "你是一个专业的悬疑小说家和解谜游戏设计师。你的任务是生成高质量的海龟汤谜题。请直接返回 JSON 格式数据，不要包含 Markdown 代码块标记。";
+  const systemPrompt = "你是一个专业的悬疑小说家和解谜游戏设计师。你的任务是生成高质量的海龟汤谜题。请直接返回 JSON 格式数据，不要包含 Markdown 代码块标记（如 ```json）。确保返回的是合法的 JSON 字符串。";
 
   const userPrompt = `
     请创作一个新的海龟汤谜题。
@@ -173,7 +173,7 @@ export const generateSoup = async (
     }
   `;
 
-  // --- OpenAI Provider Flow ---
+  // --- OpenAI / New API Provider Flow ---
   if (settings.provider === 'openai') {
     const baseUrl = getOpenAIBaseUrl(settings);
     
@@ -191,14 +191,16 @@ export const generateSoup = async (
             { role: 'user', content: userPrompt }
           ],
           temperature: settings.temperature,
-          // Try to enforce JSON mode if supported
-          response_format: { type: "json_object" }
+          // IMPORTANT: Do NOT force `response_format: { type: "json_object" }` here.
+          // Many models served via New API (like Claude, or older models) do not support this parameter 
+          // and will throw a 400 Bad Request. 
+          // We rely on the system prompt to enforce JSON structure.
         })
       });
 
       if (!response.ok) {
         const errData = await response.json().catch(() => null);
-        throw new Error(errData?.error?.message || `API Error: ${response.status}`);
+        throw new Error(errData?.error?.message || `API Error: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -211,7 +213,7 @@ export const generateSoup = async (
       return JSON.parse(jsonStr) as SoupData;
 
     } catch (error) {
-      console.error("OpenAI Generation Error:", error);
+      console.error("OpenAI/NewAPI Generation Error:", error);
       throw error;
     }
   } 

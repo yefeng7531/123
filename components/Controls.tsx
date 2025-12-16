@@ -245,7 +245,7 @@ export const Controls: React.FC<ControlsProps> = ({
               className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded transition-all ${aiSettings.provider === 'openai' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
             >
               <Cpu className="w-3.5 h-3.5" />
-              OpenAI / Compatible
+              OpenAI / New API
             </button>
           </div>
 
@@ -259,7 +259,7 @@ export const Controls: React.FC<ControlsProps> = ({
                  type="password"
                  value={aiSettings.apiKey || ''}
                  onChange={(e) => setAiSettings({...aiSettings, apiKey: e.target.value})}
-                 placeholder="粘贴你的 API Key"
+                 placeholder="粘贴你的 API Key (sk-...)"
                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none font-mono"
                />
              </div>
@@ -273,9 +273,14 @@ export const Controls: React.FC<ControlsProps> = ({
                  type="text"
                  value={aiSettings.baseUrl || ''}
                  onChange={(e) => setAiSettings({...aiSettings, baseUrl: e.target.value})}
-                 placeholder={aiSettings.provider === 'openai' ? "例如: https://api.deepseek.com/v1" : "默认: Google官方, 可填 Gemini 反代"}
+                 placeholder={aiSettings.provider === 'openai' ? "New API 请填: https://your-domain/v1" : "默认: Google官方, 可填 Gemini 反代"}
                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none font-mono"
                />
+               {aiSettings.provider === 'openai' && (
+                 <p className="text-[9px] text-slate-500 pl-1">
+                   提示：New API/OneAPI 通常需要以 <code>/v1</code> 结尾
+                 </p>
+               )}
              </div>
 
              {/* Connection Status & Button */}
