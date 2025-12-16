@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SoupLogic, SoupTone, SoupDifficulty, LOGIC_CONFIGS, TONE_CONFIGS, DIFFICULTY_CONFIGS, PRESET_TAGS, AISettings } from '../types';
 import { testConnection, fetchModels } from '../services/geminiService';
-import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BarChart3, Key, Link, Plug, CheckCircle2, XCircle, Server, RefreshCw } from 'lucide-react';
+import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BarChart3, Key, Link, Plug, CheckCircle2, XCircle, Server, RefreshCw, Cpu } from 'lucide-react';
 
 interface ControlsProps {
   logic: SoupLogic;
@@ -18,12 +18,18 @@ interface ControlsProps {
   isLoading: boolean;
 }
 
-const DEFAULT_MODELS = [
+const DEFAULT_GEMINI_MODELS = [
   "gemini-2.5-flash",
   "gemini-3-pro-preview",
   "gemini-2.0-flash-exp",
-  "gemini-1.5-pro",
-  "gemini-1.5-flash",
+];
+
+const DEFAULT_OPENAI_MODELS = [
+  "gpt-4o",
+  "gpt-4o-mini",
+  "deepseek-chat",
+  "deepseek-reasoner",
+  "claude-3-5-sonnet",
 ];
 
 export const Controls: React.FC<ControlsProps> = ({
@@ -43,11 +49,19 @@ export const Controls: React.FC<ControlsProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [connectionMsg, setConnectionMsg] = useState('');
-  const [availableModels, setAvailableModels] = useState<string[]>(DEFAULT_MODELS);
+  
+  // Dynamic list based on fetch
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+
+  // Derived defaults based on provider
+  const defaultModels = aiSettings.provider === 'openai' ? DEFAULT_OPENAI_MODELS : DEFAULT_GEMINI_MODELS;
+  const currentModelList = availableModels.length > 0 ? availableModels : defaultModels;
 
   const handleTestConnection = async () => {
     setConnectionStatus('testing');
     setConnectionMsg('正在连接...');
+    setAvailableModels([]); // Reset list on new test
+
     try {
       // 1. Test basic connectivity (Ping)
       await testConnection(aiSettings);
@@ -58,21 +72,32 @@ export const Controls: React.FC<ControlsProps> = ({
       
       if (models.length > 0) {
         setAvailableModels(models);
-        // If current model is not in the list, keep it but maybe warn? Or just let it be.
-      } else {
-        // Fallback if fetch returns empty but connection worked (unlikely for Gemini)
-        setAvailableModels(DEFAULT_MODELS);
       }
 
       setConnectionStatus('success');
       setConnectionMsg(`已连接 (发现 ${models.length > 0 ? models.length : '默认'} 个模型)`);
       
-      // Reset status visual after a delay
       setTimeout(() => setConnectionStatus('idle'), 3000);
     } catch (error: any) {
       setConnectionStatus('error');
       setConnectionMsg(error.message || '连接失败');
     }
+  };
+
+  const toggleProvider = () => {
+    const newProvider = aiSettings.provider === 'gemini' ? 'openai' : 'gemini';
+    const newModel = newProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    const newBaseUrl = ''; // Reset base URL when switching to avoid confusion
+    
+    setAiSettings({
+      ...aiSettings, 
+      provider: newProvider,
+      model: newModel,
+      baseUrl: newBaseUrl
+    });
+    setAvailableModels([]); // Reset fetched models
+    setConnectionStatus('idle');
+    setConnectionMsg('');
   };
 
   return (
@@ -206,6 +231,24 @@ export const Controls: React.FC<ControlsProps> = ({
       {showSettings && (
         <div className="bg-slate-950/40 rounded-xl p-3 space-y-4 animate-in fade-in slide-in-from-top-2 border border-slate-800">
           
+          {/* Provider Selection */}
+          <div className="flex items-center justify-between bg-slate-900 rounded-lg p-1 border border-slate-800">
+            <button
+              onClick={() => aiSettings.provider !== 'gemini' && toggleProvider()}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded transition-all ${aiSettings.provider === 'gemini' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Google Gemini
+            </button>
+            <button
+              onClick={() => aiSettings.provider !== 'openai' && toggleProvider()}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded transition-all ${aiSettings.provider === 'openai' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <Cpu className="w-3.5 h-3.5" />
+              OpenAI / Compatible
+            </button>
+          </div>
+
           <div className="space-y-3">
              {/* API Key Input */}
              <div className="space-y-1">
@@ -230,7 +273,7 @@ export const Controls: React.FC<ControlsProps> = ({
                  type="text"
                  value={aiSettings.baseUrl || ''}
                  onChange={(e) => setAiSettings({...aiSettings, baseUrl: e.target.value})}
-                 placeholder="默认: Google官方, 可填 Gemini 格式的反代"
+                 placeholder={aiSettings.provider === 'openai' ? "例如: https://api.deepseek.com/v1" : "默认: Google官方, 可填 Gemini 反代"}
                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none font-mono"
                />
              </div>
@@ -273,7 +316,7 @@ export const Controls: React.FC<ControlsProps> = ({
                    <Server className="w-3 h-3" /> 模型选择 (Model ID)
                 </label>
                 <span className="text-[10px] text-slate-600">
-                  {availableModels.length > 5 ? `已加载 ${availableModels.length} 个模型` : '使用预设列表'}
+                  {availableModels.length > 0 ? `已加载 ${availableModels.length} 个模型` : '使用预设列表'}
                 </span>
              </div>
              
@@ -290,13 +333,16 @@ export const Controls: React.FC<ControlsProps> = ({
                   <RefreshCw className={`w-3 h-3 ${connectionStatus === 'testing' ? 'animate-spin' : ''}`} />
                 </div>
                 <datalist id="model-options">
-                  {availableModels.map(m => (
+                  {currentModelList.map(m => (
                     <option key={m} value={m} />
                   ))}
                 </datalist>
              </div>
              <p className="text-[10px] text-slate-600 pt-0.5">
-               {availableModels.length > 0 && !DEFAULT_MODELS.every(m => availableModels.includes(m)) ? "已同步最新模型列表" : "支持 gemini-2.5-flash, gemini-3-pro 等"}
+               {aiSettings.provider === 'gemini' 
+                 ? "支持 gemini-2.5-flash, gemini-3-pro 等" 
+                 : "支持 gpt-4o, deepseek-chat, claude-3-5 等"
+               }
              </p>
           </div>
 

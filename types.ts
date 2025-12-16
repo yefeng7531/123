@@ -29,7 +29,10 @@ export interface SoupData {
   tone?: SoupTone;   // Store context
 }
 
+export type AIProvider = 'gemini' | 'openai';
+
 export interface AISettings {
+  provider: AIProvider;
   model: string;
   temperature: number;
   apiKey?: string;

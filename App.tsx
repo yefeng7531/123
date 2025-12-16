@@ -22,12 +22,16 @@ const App: React.FC = () => {
     try {
       const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        // Ensure provider exists for legacy saves
+        if (!parsed.provider) parsed.provider = 'gemini';
+        return parsed;
       }
     } catch (e) {
       console.error("Failed to load settings", e);
     }
     return {
+      provider: 'gemini',
       model: 'gemini-2.5-flash',
       temperature: 1.1,
       apiKey: '',
