@@ -1,9 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { SoupLogic, SoupTone, SoupDifficulty, SoupData, AISettings } from "../types";
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 export const generateSoup = async (
   logic: SoupLogic,
   tone: SoupTone,
@@ -12,6 +9,9 @@ export const generateSoup = async (
   settings: AISettings
 ): Promise<SoupData> => {
   
+  // Initialize inside function to handle environment variables safely at runtime
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
   const toneDesc = tone === SoupTone.Default ? "没有特定的恐怖或搞笑偏好，主要看重谜题质量" : `风格倾向于"${tone}"`;
   
   const prompt = `

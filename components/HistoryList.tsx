@@ -46,9 +46,10 @@ export const HistoryList: React.FC<HistoryListProps> = ({
       {/* List */}
       <div className="overflow-y-auto p-4 space-y-3 custom-scrollbar flex-1">
         {history.map((item) => {
-          const toneConfig = item.tone ? TONE_CONFIGS[item.tone] : TONE_CONFIGS[SoupTone.Default];
-          // Approximate mapping back to difficulty enum key if needed, or just use difficulty number
-          // For display, let's just use colors based on level
+          // Robust check: Ensure tone exists and is a valid key in TONE_CONFIGS. Fallback to Default otherwise.
+          const toneKey = (item.tone && TONE_CONFIGS[item.tone]) ? item.tone : SoupTone.Default;
+          const toneConfig = TONE_CONFIGS[toneKey];
+          
           let diffColor = 'text-blue-400';
           if (item.difficulty >= 4) diffColor = 'text-red-400';
           else if (item.difficulty === 1) diffColor = 'text-emerald-400';
