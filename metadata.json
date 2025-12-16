@@ -1,0 +1,5 @@
+{
+  "name": "海龟汤生成器 (Turtle Soup AI)",
+  "description": "基于 Google Gemini API 的智能海龟汤（情境猜谜）生成器，支持多种风格（本格、变格、红汤、黑汤等），提供沉浸式解谜体验。",
+  "requestFramePermissions": []
+}
