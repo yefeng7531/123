@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SoupLogic, SoupTone, SoupDifficulty, TONE_CONFIGS, DIFFICULTY_CONFIGS, PRESET_TAGS, AISettings } from '../types';
 import { testConnection, fetchModels, constructPromptPayload, SILICONFLOW_BASE_URL } from '../services/geminiService';
-import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BarChart3, Key, Plug, Server, Code, X, Eye, RefreshCw, Send } from 'lucide-react';
+import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BarChart3, Key, Plug, Server, Code, X, RefreshCw, Send, Lock, Unlock } from 'lucide-react';
 
 interface ControlsProps {
   logic: SoupLogic;
@@ -26,6 +26,11 @@ const SILICONFLOW_MODELS = [
   "01-ai/Yi-1.5-34B-Chat-16K",
   "THUDM/glm-4-9b-chat"
 ];
+
+// Encrypted-ish or just constant site key as requested
+const SITE_KEY = "sk-sanuznnwkqxjtfhugszzynjsbuaiqfjcznzvzqwhcbgnyhgg";
+const SECURITY_QUESTION = "网站所有人";
+const SECURITY_ANSWER = "yefeng";
 
 export const Controls: React.FC<ControlsProps> = ({
   logic,
@@ -52,6 +57,11 @@ export const Controls: React.FC<ControlsProps> = ({
   // State for editable prompts
   const [editableSystemPrompt, setEditableSystemPrompt] = useState('');
   const [editableUserPrompt, setEditableUserPrompt] = useState('');
+
+  // Unlock Modal State
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [unlockInput, setUnlockInput] = useState('');
+  const [unlockError, setUnlockError] = useState(false);
 
   // Open modal and populate fields
   const handleOpenPromptModal = () => {
@@ -97,6 +107,18 @@ export const Controls: React.FC<ControlsProps> = ({
       setConnectionStatus('error');
       const msg = error.message || 'Connection Failed';
       setConnectionMsg(msg.length > 25 ? msg.slice(0, 25) + '...' : msg);
+    }
+  };
+
+  const handleUnlockKey = () => {
+    if (unlockInput.trim().toLowerCase() === SECURITY_ANSWER.toLowerCase()) {
+      setAiSettings({ ...aiSettings, apiKey: SITE_KEY });
+      setShowUnlockModal(false);
+      setUnlockInput('');
+      setUnlockError(false);
+      // alert("内置 Key 已填充！");
+    } else {
+      setUnlockError(true);
     }
   };
 
@@ -216,14 +238,22 @@ export const Controls: React.FC<ControlsProps> = ({
           {/* Header & Link */}
           <div className="flex justify-between items-center">
             <span className="text-[10px] font-bold text-slate-400 uppercase">Configuration</span>
-            <a 
-              href="https://cloud.siliconflow.cn/account/ak" 
-              target="_blank" 
-              rel="noreferrer"
-              className="text-[10px] text-amber-500 hover:text-amber-400 underline flex items-center gap-1"
-            >
-              获取 API Key <Plug className="w-3 h-3" />
-            </a>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowUnlockModal(true)}
+                className="text-[10px] text-emerald-500 hover:text-emerald-400 underline flex items-center gap-1"
+              >
+                解锁内置 Key <Lock className="w-3 h-3" />
+              </button>
+              <a 
+                href="https://cloud.siliconflow.cn/account/ak" 
+                target="_blank" 
+                rel="noreferrer"
+                className="text-[10px] text-amber-500 hover:text-amber-400 underline flex items-center gap-1"
+              >
+                获取 Key <Plug className="w-3 h-3" />
+              </a>
+            </div>
           </div>
 
           {/* API Key */}
@@ -240,7 +270,7 @@ export const Controls: React.FC<ControlsProps> = ({
              />
           </div>
 
-          {/* Base URL (Hidden by default unless edited, but user wants detailed config) */}
+          {/* Base URL */}
           <div className="space-y-1">
              <label className="flex items-center justify-between text-[10px] uppercase font-bold text-slate-400">
                 <span className="flex items-center gap-1"><Server className="w-3 h-3"/> Base URL</span>
@@ -413,6 +443,69 @@ export const Controls: React.FC<ControlsProps> = ({
             </div>
 
           </div>
+        </div>
+      )}
+
+      {/* Unlock Key Modal */}
+      {showUnlockModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
+           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden">
+             <div className="p-6 text-center space-y-4">
+               <div className="w-12 h-12 bg-emerald-900/30 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                 <Unlock className="w-6 h-6" />
+               </div>
+               
+               <div className="space-y-1">
+                 <h3 className="text-lg font-bold text-white">解锁内置 API Key</h3>
+                 <p className="text-sm text-slate-400">回答安全问题以自动填充 Key</p>
+               </div>
+
+               <div className="text-left space-y-2 py-2">
+                 <label className="text-xs font-bold text-amber-500 uppercase tracking-wider">问题</label>
+                 <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-slate-200 text-sm">
+                   {SECURITY_QUESTION}
+                 </div>
+               </div>
+
+               <div className="text-left space-y-2">
+                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex justify-between">
+                    <span>答案</span>
+                    {unlockError && <span className="text-red-500 normal-case">答案错误</span>}
+                 </label>
+                 <input 
+                   type="text"
+                   value={unlockInput}
+                   onChange={(e) => {
+                     setUnlockInput(e.target.value);
+                     setUnlockError(false);
+                   }}
+                   onKeyDown={(e) => e.key === 'Enter' && handleUnlockKey()}
+                   className={`w-full bg-[#161f33] border rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 transition-all ${unlockError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-600 focus:border-emerald-500 focus:ring-emerald-500/20'}`}
+                   placeholder="请输入答案..."
+                   autoFocus
+                 />
+               </div>
+
+               <div className="flex gap-3 pt-2">
+                 <button 
+                   onClick={() => {
+                     setShowUnlockModal(false);
+                     setUnlockError(false);
+                     setUnlockInput('');
+                   }}
+                   className="flex-1 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm transition-colors"
+                 >
+                   取消
+                 </button>
+                 <button 
+                   onClick={handleUnlockKey}
+                   className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-colors shadow-lg shadow-emerald-900/20"
+                 >
+                   确认解锁
+                 </button>
+               </div>
+             </div>
+           </div>
         </div>
       )}
 
