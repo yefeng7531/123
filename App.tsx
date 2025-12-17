@@ -21,7 +21,7 @@ const App: React.FC = () => {
     model: 'deepseek-ai/DeepSeek-V3',
     temperature: 1.3, // DeepSeek tends to be better with higher temp for creative writing
     baseUrl: SILICONFLOW_BASE_URL,
-    apiKey: process.env.API_KEY || ''
+    apiKey: '' // Default is empty to force unlock or manual entry
   });
 
   // --- App Logic State ---

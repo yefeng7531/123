@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SoupLogic, SoupTone, SoupDifficulty, TONE_CONFIGS, DIFFICULTY_CONFIGS, PRESET_TAGS, AISettings } from '../types';
 import { testConnection, fetchModels, constructPromptPayload, SILICONFLOW_BASE_URL } from '../services/geminiService';
-import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BarChart3, Key, Plug, Server, Code, X, RefreshCw, Send, Lock, Unlock } from 'lucide-react';
+import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BarChart3, Key, Plug, Server, Code, X, RefreshCw, Send, Lock, Unlock, ShieldCheck, Trash2 } from 'lucide-react';
 
 interface ControlsProps {
   logic: SoupLogic;
@@ -27,7 +27,6 @@ const SILICONFLOW_MODELS = [
   "THUDM/glm-4-9b-chat"
 ];
 
-// Encrypted-ish or just constant site key as requested
 const SITE_KEY = "sk-sanuznnwkqxjtfhugszzynjsbuaiqfjcznzvzqwhcbgnyhgg";
 const SECURITY_QUESTION = "网站所有人";
 const SECURITY_ANSWER = "yefeng";
@@ -62,6 +61,8 @@ export const Controls: React.FC<ControlsProps> = ({
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [unlockInput, setUnlockInput] = useState('');
   const [unlockError, setUnlockError] = useState(false);
+
+  const isBuiltInKey = aiSettings.apiKey === SITE_KEY;
 
   // Open modal and populate fields
   const handleOpenPromptModal = () => {
@@ -116,10 +117,13 @@ export const Controls: React.FC<ControlsProps> = ({
       setShowUnlockModal(false);
       setUnlockInput('');
       setUnlockError(false);
-      // alert("内置 Key 已填充！");
     } else {
       setUnlockError(true);
     }
+  };
+
+  const handleClearKey = () => {
+    setAiSettings({ ...aiSettings, apiKey: '' });
   };
 
   return (
@@ -241,9 +245,11 @@ export const Controls: React.FC<ControlsProps> = ({
             <div className="flex gap-3">
               <button 
                 onClick={() => setShowUnlockModal(true)}
-                className="text-[10px] text-emerald-500 hover:text-emerald-400 underline flex items-center gap-1"
+                className={`text-[10px] underline flex items-center gap-1 transition-colors ${isBuiltInKey ? 'text-emerald-500 cursor-default no-underline' : 'text-slate-400 hover:text-emerald-400'}`}
+                disabled={isBuiltInKey}
               >
-                解锁内置 Key <Lock className="w-3 h-3" />
+                {isBuiltInKey ? <ShieldCheck className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                {isBuiltInKey ? '已解锁' : '解锁内置 Key'}
               </button>
               <a 
                 href="https://cloud.siliconflow.cn/account/ak" 
@@ -256,18 +262,35 @@ export const Controls: React.FC<ControlsProps> = ({
             </div>
           </div>
 
-          {/* API Key */}
+          {/* API Key Input - Special handling for built-in key to prevent copying */}
           <div className="space-y-1">
              <label className="flex items-center gap-1 text-[10px] uppercase font-bold text-slate-400">
-                <Key className="w-3 h-3"/> SiliconFlow Key (sk-...)
+                <Key className="w-3 h-3"/> SiliconFlow Key
              </label>
-             <input 
-               type="password"
-               value={aiSettings.apiKey || ''}
-               onChange={(e) => setAiSettings({...aiSettings, apiKey: e.target.value})}
-               placeholder="sk-xxxxxxxxxxxxxxxx"
-               className="w-full bg-[#161f33] border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/20"
-             />
+             
+             {isBuiltInKey ? (
+               <div className="w-full bg-emerald-900/10 border border-emerald-900/50 rounded px-3 py-2 text-xs text-emerald-500 font-mono flex items-center justify-between select-none">
+                 <div className="flex items-center gap-2">
+                   <ShieldCheck className="w-3.5 h-3.5" />
+                   <span className="tracking-widest">●●●●●●●● (BUILT-IN ACTIVE)</span>
+                 </div>
+                 <button 
+                   onClick={handleClearKey}
+                   className="text-emerald-700 hover:text-red-400 transition-colors"
+                   title="清除 Key"
+                 >
+                   <X className="w-3.5 h-3.5" />
+                 </button>
+               </div>
+             ) : (
+               <input 
+                 type="password"
+                 value={aiSettings.apiKey || ''}
+                 onChange={(e) => setAiSettings({...aiSettings, apiKey: e.target.value})}
+                 placeholder="sk-xxxxxxxxxxxxxxxx"
+                 className="w-full bg-[#161f33] border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/20"
+               />
+             )}
           </div>
 
           {/* Base URL */}
