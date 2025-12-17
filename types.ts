@@ -1,3 +1,5 @@
+import { ReactNode } from 'react';
+
 export enum SoupLogic {
   Classic = '本格', // Realistic, logic-based
   Twisted = '变格', // Supernatural, sci-fi allowed
@@ -17,43 +19,71 @@ export enum SoupDifficulty {
   Hell = '烧脑',
 }
 
+export interface PromptPayload {
+  system: string;
+  user: string;
+  model: string;
+  temperature: number;
+}
+
 export interface SoupData {
   id: string;        // Unique ID for history
   timestamp: number; // Created time
   title: string;
   surface: string; // The puzzle/question (汤面)
   bottom: string;  // The truth/answer (汤底)
-  difficulty: number; // 1-5 stars
+  difficulty: number;
   tags: string[];
-  logic?: SoupLogic; // Store context
-  tone?: SoupTone;   // Store context
+  logic?: SoupLogic;
+  tone?: SoupTone;
+  promptPayload?: PromptPayload; // Store the prompt used to generate this
 }
 
+export interface LogicConfig {
+  color: string;
+  icon: string;
+  description: string;
+}
+
+export const LOGIC_CONFIGS: Record<SoupLogic, LogicConfig> = {
+  [SoupLogic.Classic]: { color: 'text-emerald-400', icon: '🧬', description: '符合现实逻辑，无超自然因素' },
+  [SoupLogic.Twisted]: { color: 'text-purple-400', icon: '👻', description: '包含科幻、鬼怪或超能力设定' },
+};
+
+export interface ToneConfig {
+  color: string;
+  borderColor: string;
+}
+
+export const TONE_CONFIGS: Record<SoupTone, ToneConfig> = {
+  [SoupTone.Default]: { color: 'text-slate-300', borderColor: 'border-slate-600' },
+  [SoupTone.Red]: { color: 'text-red-500', borderColor: 'border-red-800' },
+  [SoupTone.Black]: { color: 'text-gray-400', borderColor: 'border-gray-700' },
+  [SoupTone.Clear]: { color: 'text-blue-400', borderColor: 'border-blue-800' },
+};
+
+export interface DifficultyConfig {
+  label: string;
+  color: string;
+  icon: string;
+}
+
+export const DIFFICULTY_CONFIGS: Record<SoupDifficulty, DifficultyConfig> = {
+  [SoupDifficulty.Easy]: { label: 'Easy', color: 'text-emerald-400', icon: '🟢' },
+  [SoupDifficulty.Normal]: { label: 'Normal', color: 'text-blue-400', icon: '🔵' },
+  [SoupDifficulty.Hard]: { label: 'Hard', color: 'text-orange-400', icon: '🟠' },
+  [SoupDifficulty.Hell]: { label: 'Hell', color: 'text-red-500', icon: '🔴' },
+};
+
+export const PRESET_TAGS = [
+  "赛博朋克", "克苏鲁", "校园怪谈", "心理恐怖", "时间循环", 
+  "密室", "复仇", "误会", "双重人格", "人工智能"
+];
+
 export interface AISettings {
-  provider: 'gemini' | 'openai'; // New: Switch between Google SDK and OpenAI Compatible
-  baseUrl?: string; // New: Custom endpoint
-  apiKey?: string; // New: User override
+  // Simplified for SiliconFlow/OpenAI compatible only
+  baseUrl: string;
+  apiKey: string;
   model: string;
   temperature: number;
 }
-
-export const LOGIC_CONFIGS: Record<SoupLogic, { description: string }> = {
-  [SoupLogic.Classic]: { description: '现实逻辑，无超自然元素，依靠常识推理。' },
-  [SoupLogic.Twisted]: { description: '脑洞大开，可包含科幻、奇幻、鬼怪设定。' },
-};
-
-export const TONE_CONFIGS: Record<SoupTone, { color: string; description: string; borderColor: string }> = {
-  [SoupTone.Default]: { color: 'text-slate-400', borderColor: 'border-slate-500/50', description: '标准谜题，不限题材。' },
-  [SoupTone.Red]: { color: 'text-red-500', borderColor: 'border-red-600/50', description: '惊悚恐怖，涉及死亡或血腥。' },
-  [SoupTone.Black]: { color: 'text-gray-400', borderColor: 'border-gray-500/50', description: '人性阴暗，犯罪心理，细思极恐。' },
-  [SoupTone.Clear]: { color: 'text-blue-400', borderColor: 'border-blue-500/50', description: '轻松幽默，温馨治愈，无恐怖成分。' },
-};
-
-export const DIFFICULTY_CONFIGS: Record<SoupDifficulty, { description: string, color: string, icon: string }> = {
-  [SoupDifficulty.Easy]: { description: '直观易懂，适合新手', color: 'text-emerald-400', icon: '🌱' },
-  [SoupDifficulty.Normal]: { description: '标准难度，逻辑适中', color: 'text-blue-400', icon: '💧' },
-  [SoupDifficulty.Hard]: { description: '线索隐晦，误导性强', color: 'text-orange-400', icon: '🔥' },
-  [SoupDifficulty.Hell]: { description: '极度烧脑，考验脑洞', color: 'text-red-500', icon: '👹' },
-};
-
-export const PRESET_TAGS = ["校园", "医院", "电梯", "古代", "科幻", "镜子", "车祸", "复仇", "误会", "超能力"];

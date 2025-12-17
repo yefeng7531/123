@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SoupLogic, SoupTone, SoupDifficulty, SoupData, AISettings } from './types';
-import { generateSoup } from './services/geminiService';
+import { generateSoup, SILICONFLOW_BASE_URL } from './services/geminiService';
 import { Controls } from './components/Controls';
 import { SoupCard } from './components/SoupCard';
 import { HistoryList } from './components/HistoryList';
@@ -15,12 +15,13 @@ const App: React.FC = () => {
   const [tone, setTone] = useState<SoupTone>(SoupTone.Default);
   const [difficulty, setDifficulty] = useState<SoupDifficulty>(SoupDifficulty.Normal);
   const [customPrompt, setCustomPrompt] = useState<string>("");
+  
+  // Initialize with SiliconFlow specific defaults
   const [aiSettings, setAiSettings] = useState<AISettings>({
-    provider: 'gemini',
-    model: 'gemini-3-pro-preview',
-    temperature: 1.1,
-    baseUrl: '',
-    apiKey: ''
+    model: 'deepseek-ai/DeepSeek-V3',
+    temperature: 1.3, // DeepSeek tends to be better with higher temp for creative writing
+    baseUrl: SILICONFLOW_BASE_URL,
+    apiKey: process.env.API_KEY || ''
   });
 
   // --- App Logic State ---
@@ -47,17 +48,25 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
   }, [history]);
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (sysPromptOverride?: string, userPromptOverride?: string) => {
     setIsLoading(true);
     setError(null);
     
     try {
-      const rawData = await generateSoup(logic, tone, difficulty, customPrompt, aiSettings);
+      const result = await generateSoup(
+        logic, 
+        tone, 
+        difficulty, 
+        customPrompt, 
+        aiSettings,
+        sysPromptOverride,
+        userPromptOverride
+      );
       
       const id = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
       
       const newSoup: SoupData = {
-        ...rawData,
+        ...result,
         id: id,
         timestamp: Date.now(),
         logic, 

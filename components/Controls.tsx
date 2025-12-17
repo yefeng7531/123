@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { SoupLogic, SoupTone, SoupDifficulty, LOGIC_CONFIGS, TONE_CONFIGS, DIFFICULTY_CONFIGS, PRESET_TAGS, AISettings } from '../types';
-import { testConnection, fetchModels } from '../services/geminiService';
-import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BarChart3, Key, Link, Plug, CheckCircle2, XCircle, Server, RefreshCw, Cpu, Globe } from 'lucide-react';
+import { SoupLogic, SoupTone, SoupDifficulty, TONE_CONFIGS, DIFFICULTY_CONFIGS, PRESET_TAGS, AISettings } from '../types';
+import { testConnection, fetchModels, constructPromptPayload, SILICONFLOW_BASE_URL } from '../services/geminiService';
+import { Sparkles, Loader2, Settings, Dna, Palette, PenTool, BarChart3, Key, Plug, Server, Code, X, Eye, RefreshCw, Send } from 'lucide-react';
 
 interface ControlsProps {
   logic: SoupLogic;
@@ -14,24 +14,17 @@ interface ControlsProps {
   setCustomPrompt: (s: string) => void;
   aiSettings: AISettings;
   setAiSettings: (s: AISettings) => void;
-  onGenerate: () => void;
+  onGenerate: (sys?: string, user?: string) => void;
   isLoading: boolean;
 }
 
-const DEFAULT_GEMINI_MODELS = [
-  "gemini-3-pro-preview",
-  "gemini-2.5-flash",
-  "gemini-2.0-flash-exp",
-];
-
-const DEFAULT_OPENAI_MODELS = [
-  "gpt-4o",
-  "gpt-4o-mini",
+const SILICONFLOW_MODELS = [
   "deepseek-ai/DeepSeek-V3", 
   "deepseek-ai/DeepSeek-R1",
-  "deepseek-chat",
-  "deepseek-reasoner",
-  "claude-3-5-sonnet",
+  "Qwen/Qwen2.5-72B-Instruct",
+  "Qwen/Qwen2.5-7B-Instruct",
+  "01-ai/Yi-1.5-34B-Chat-16K",
+  "THUDM/glm-4-9b-chat"
 ];
 
 export const Controls: React.FC<ControlsProps> = ({
@@ -48,12 +41,31 @@ export const Controls: React.FC<ControlsProps> = ({
   onGenerate,
   isLoading,
 }) => {
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(true); // Default open for first time users
+  const [showPromptModal, setShowPromptModal] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [connectionMsg, setConnectionMsg] = useState('');
   
   const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const currentModelList = availableModels.length > 0 ? availableModels : (aiSettings.provider === 'openai' ? DEFAULT_OPENAI_MODELS : DEFAULT_GEMINI_MODELS);
+  const currentModelList = availableModels.length > 0 ? availableModels : SILICONFLOW_MODELS;
+
+  // State for editable prompts
+  const [editableSystemPrompt, setEditableSystemPrompt] = useState('');
+  const [editableUserPrompt, setEditableUserPrompt] = useState('');
+
+  // Open modal and populate fields
+  const handleOpenPromptModal = () => {
+    const payload = constructPromptPayload(logic, tone, difficulty, customPrompt, aiSettings);
+    setEditableSystemPrompt(payload.system);
+    setEditableUserPrompt(payload.user);
+    setShowPromptModal(true);
+  };
+
+  const handleResetPrompt = () => {
+    const payload = constructPromptPayload(logic, tone, difficulty, customPrompt, aiSettings);
+    setEditableSystemPrompt(payload.system);
+    setEditableUserPrompt(payload.user);
+  };
 
   const handleTestConnection = async () => {
     setConnectionStatus('testing');
@@ -74,9 +86,9 @@ export const Controls: React.FC<ControlsProps> = ({
       
       if (models.length > 0) {
         setAvailableModels(models);
-        setConnectionMsg(`Connected! (${models.length} models)`);
+        setConnectionMsg(`Success! (${models.length} models)`);
       } else {
-        setConnectionMsg('Connected! (Default models)');
+        setConnectionMsg('Success! (Default models)');
       }
 
       setConnectionStatus('success');
@@ -85,7 +97,6 @@ export const Controls: React.FC<ControlsProps> = ({
       setConnectionStatus('error');
       const msg = error.message || 'Connection Failed';
       setConnectionMsg(msg.length > 25 ? msg.slice(0, 25) + '...' : msg);
-      console.error("Conn Error:", error);
     }
   };
 
@@ -189,98 +200,59 @@ export const Controls: React.FC<ControlsProps> = ({
           className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors ${showSettings ? 'text-amber-500' : 'text-slate-500 hover:text-slate-300'}`}
         >
           <Settings className="w-4 h-4" />
-          API Connections
+          SiliconFlow API
         </button>
+        
+        {/* Connection Indicator */}
+        {!showSettings && (
+           <div className={`w-2 h-2 rounded-full ${aiSettings.apiKey ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`} />
+        )}
       </div>
 
-      {/* --- SillyTavern Style API Panel --- */}
+      {/* --- Detailed Settings Panel --- */}
       {showSettings && (
         <div className="bg-[#0b101b] rounded-xl p-4 space-y-4 border border-slate-700 shadow-inner animate-in fade-in zoom-in-95 duration-200">
           
-          {/* API Type Select */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase font-bold text-slate-400">API Type</label>
-            <div className="grid grid-cols-2 gap-1 bg-slate-900 p-1 rounded border border-slate-800">
-              <button
-                onClick={() => setAiSettings({...aiSettings, provider: 'gemini', model: 'gemini-3-pro-preview'})}
-                className={`flex items-center justify-center gap-2 py-1.5 rounded text-xs font-bold transition-all ${aiSettings.provider === 'gemini' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <Sparkles className="w-3 h-3" /> Gemini
-              </button>
-              <button
-                onClick={() => setAiSettings({...aiSettings, provider: 'openai', model: 'deepseek-ai/DeepSeek-V3'})}
-                className={`flex items-center justify-center gap-2 py-1.5 rounded text-xs font-bold transition-all ${aiSettings.provider === 'openai' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <Cpu className="w-3 h-3" /> OpenAI / DeepSeek
-              </button>
-            </div>
+          {/* Header & Link */}
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-bold text-slate-400 uppercase">Configuration</span>
+            <a 
+              href="https://cloud.siliconflow.cn/account/ak" 
+              target="_blank" 
+              rel="noreferrer"
+              className="text-[10px] text-amber-500 hover:text-amber-400 underline flex items-center gap-1"
+            >
+              获取 API Key <Plug className="w-3 h-3" />
+            </a>
           </div>
 
-          {/* API URL */}
-          <div className="space-y-1">
-             <label className="flex items-center justify-between text-[10px] uppercase font-bold text-slate-400">
-                <span className="flex items-center gap-1"><Globe className="w-3 h-3"/> API URL (Base URL)</span>
-             </label>
-             <input 
-               type="text"
-               value={aiSettings.baseUrl || ''}
-               onChange={(e) => setAiSettings({...aiSettings, baseUrl: e.target.value})}
-               placeholder={aiSettings.provider === 'openai' ? "https://api.siliconflow.cn/v1" : "Optional (Default: Google API)"}
-               className="w-full bg-[#161f33] border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/20"
-             />
-             {aiSettings.provider === 'openai' && (
-               <div className="flex gap-2 justify-end">
-                  <button 
-                    onClick={() => setAiSettings({...aiSettings, baseUrl: 'https://api.siliconflow.cn/v1'})}
-                    className="text-[9px] text-slate-500 hover:text-amber-500 underline"
-                  >
-                    Set SiliconFlow
-                  </button>
-                  <button 
-                    onClick={() => setAiSettings({...aiSettings, baseUrl: 'http://127.0.0.1:8000/v1'})}
-                    className="text-[9px] text-slate-500 hover:text-amber-500 underline"
-                  >
-                    Set Local
-                  </button>
-               </div>
-             )}
-          </div>
-
-          {/* API Key / Password */}
+          {/* API Key */}
           <div className="space-y-1">
              <label className="flex items-center gap-1 text-[10px] uppercase font-bold text-slate-400">
-                <Key className="w-3 h-3"/> {aiSettings.provider === 'openai' ? "API Key / Password" : "API Key"}
+                <Key className="w-3 h-3"/> SiliconFlow Key (sk-...)
              </label>
              <input 
                type="password"
                value={aiSettings.apiKey || ''}
                onChange={(e) => setAiSettings({...aiSettings, apiKey: e.target.value})}
-               placeholder={aiSettings.provider === 'openai' ? "sk-... or Proxy Password" : "Gemini API Key"}
+               placeholder="sk-xxxxxxxxxxxxxxxx"
                className="w-full bg-[#161f33] border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/20"
              />
           </div>
 
-          {/* Connect Button */}
-          <button 
-            onClick={handleTestConnection}
-            disabled={connectionStatus === 'testing'}
-            className={`
-              w-full py-2 rounded text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border transition-all
-              ${connectionStatus === 'success' 
-                ? 'bg-emerald-900/30 border-emerald-600 text-emerald-400' 
-                : connectionStatus === 'error'
-                  ? 'bg-red-900/30 border-red-600 text-red-400'
-                  : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-300'
-              }
-            `}
-          >
-            {connectionStatus === 'testing' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plug className="w-3 h-3" />}
-            {connectionStatus === 'testing' ? 'Connecting...' : connectionStatus === 'success' ? 'Connected' : 'Connect'}
-          </button>
-          
-          {connectionMsg && (
-             <div className="text-[10px] text-center text-slate-500 font-mono">{connectionMsg}</div>
-          )}
+          {/* Base URL (Hidden by default unless edited, but user wants detailed config) */}
+          <div className="space-y-1">
+             <label className="flex items-center justify-between text-[10px] uppercase font-bold text-slate-400">
+                <span className="flex items-center gap-1"><Server className="w-3 h-3"/> Base URL</span>
+             </label>
+             <input 
+               type="text"
+               value={aiSettings.baseUrl || ''}
+               onChange={(e) => setAiSettings({...aiSettings, baseUrl: e.target.value})}
+               placeholder={SILICONFLOW_BASE_URL}
+               className="w-full bg-[#161f33] border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:border-amber-500 focus:outline-none"
+             />
+          </div>
 
           <div className="h-px bg-slate-800 w-full my-2" />
 
@@ -288,7 +260,7 @@ export const Controls: React.FC<ControlsProps> = ({
           <div className="space-y-1">
              <label className="flex items-center justify-between text-[10px] uppercase font-bold text-slate-400">
                 <span className="flex items-center gap-1"><Server className="w-3 h-3"/> Model ID</span>
-                <span className="text-[9px] opacity-50">{currentModelList.length} Available</span>
+                {availableModels.length > 0 && <span className="text-[9px] text-emerald-500">{availableModels.length} Loaded</span>}
              </label>
              <div className="relative group">
                 <input 
@@ -308,35 +280,142 @@ export const Controls: React.FC<ControlsProps> = ({
           {/* Temperature */}
           <div className="space-y-2 pt-1">
              <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase">
-                <span>Temperature</span>
+                <span>Temperature (Creativity)</span>
                 <span>{aiSettings.temperature}</span>
              </div>
              <input 
-               type="range" min="0.1" max="2.0" step="0.05"
+               type="range" min="0.1" max="2.0" step="0.1"
                value={aiSettings.temperature}
                onChange={(e) => setAiSettings({...aiSettings, temperature: parseFloat(e.target.value)})}
                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
              />
           </div>
 
+          {/* Test Connection */}
+          <button 
+            onClick={handleTestConnection}
+            disabled={connectionStatus === 'testing' || !aiSettings.apiKey}
+            className={`
+              w-full py-2 rounded text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border transition-all
+              ${connectionStatus === 'success' 
+                ? 'bg-emerald-900/30 border-emerald-600 text-emerald-400' 
+                : connectionStatus === 'error'
+                  ? 'bg-red-900/30 border-red-600 text-red-400'
+                  : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-300'
+              }
+              disabled:opacity-50 disabled:cursor-not-allowed
+            `}
+          >
+            {connectionStatus === 'testing' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plug className="w-3 h-3" />}
+            {connectionStatus === 'testing' ? 'Connecting...' : connectionStatus === 'success' ? 'Models Loaded' : 'Test Connection'}
+          </button>
+          
+          {connectionMsg && (
+             <div className={`text-[10px] text-center font-mono ${connectionStatus === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>{connectionMsg}</div>
+          )}
+
         </div>
       )}
 
-      {/* Generate Button */}
-      <button
-        onClick={onGenerate}
-        disabled={isLoading}
-        className={`
-          group relative flex items-center justify-center gap-2 p-3.5 rounded-xl font-bold text-lg transition-all duration-300 mt-2
-          ${isLoading 
-            ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
-            : 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-lg hover:shadow-orange-500/20 active:scale-[0.98]'
-          }
-        `}
-      >
-        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5 group-hover:animate-pulse" />}
-        <span>{isLoading ? 'Processing...' : 'Generate Soup'}</span>
-      </button>
+      {/* Generate Actions */}
+      <div className="flex gap-2 mt-2">
+        {/* Prompt Inspector Button */}
+        <button
+          onClick={handleOpenPromptModal}
+          className="p-3.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-amber-500 hover:border-amber-500/50 transition-all active:scale-95"
+          title="编辑提示词 (Edit Prompt)"
+        >
+          <Code className="w-5 h-5" />
+        </button>
+
+        {/* Main Generate Button */}
+        <button
+          onClick={() => onGenerate()}
+          disabled={isLoading || !aiSettings.apiKey}
+          className={`
+            flex-1 group relative flex items-center justify-center gap-2 p-3.5 rounded-xl font-bold text-lg transition-all duration-300
+            ${isLoading 
+              ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
+              : !aiSettings.apiKey
+                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                : 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-lg hover:shadow-orange-500/20 active:scale-[0.98]'
+            }
+          `}
+        >
+          {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5 group-hover:animate-pulse" />}
+          <span>{isLoading ? 'Processing...' : 'Generate Soup'}</span>
+        </button>
+      </div>
+
+      {/* Prompt Inspector / Editor Modal */}
+      {showPromptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col">
+            
+            <div className="flex items-center justify-between p-4 border-b border-slate-800">
+              <div className="flex items-center gap-2 text-slate-200 font-bold">
+                <Code className="w-4 h-4 text-amber-500" />
+                <span>Prompt Editor</span>
+              </div>
+              <button 
+                onClick={() => setShowPromptModal(false)}
+                className="text-slate-500 hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#0b101b]">
+               <div className="space-y-1">
+                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex justify-between">
+                    <span>System Prompt</span>
+                    <span className="text-[10px] text-slate-600">Global instructions</span>
+                 </label>
+                 <textarea
+                   value={editableSystemPrompt}
+                   onChange={(e) => setEditableSystemPrompt(e.target.value)}
+                   className="w-full h-32 bg-[#0f1219] p-3 rounded-lg border border-slate-700 text-xs font-mono text-emerald-400 focus:border-emerald-500/50 focus:outline-none resize-y"
+                 />
+               </div>
+
+               <div className="space-y-1">
+                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex justify-between">
+                    <span>User Prompt</span>
+                    <span className="text-[10px] text-slate-600">The specific request</span>
+                 </label>
+                 <textarea
+                   value={editableUserPrompt}
+                   onChange={(e) => setEditableUserPrompt(e.target.value)}
+                   className="w-full h-40 bg-[#0f1219] p-3 rounded-lg border border-slate-700 text-xs font-mono text-blue-300 focus:border-blue-500/50 focus:outline-none resize-y"
+                 />
+               </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-800 bg-slate-900 flex justify-between gap-3">
+                <button
+                    onClick={handleResetPrompt}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                >
+                    <RefreshCw className="w-3.5 h-3.5" /> Reset to Default
+                </button>
+                
+                <button
+                    onClick={() => {
+                        onGenerate(editableSystemPrompt, editableUserPrompt);
+                        setShowPromptModal(false);
+                    }}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 px-6 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <Send className="w-3.5 h-3.5" /> 
+                    {isLoading ? 'Processing...' : 'Run with this Prompt'}
+                </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
